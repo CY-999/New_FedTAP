@@ -1,0 +1,246 @@
+# RAIA联邦学习后门攻击与防御实验配置
+
+# 实验基础配置
+experiment:
+  seed: 42
+  log_level: "INFO"
+  output_dir: "runs/cifar10/minmax"
+
+# 数据集配置
+datasets:
+  mnist:
+    path: "data/mnist"
+    num_classes: 10
+    target_class: 0
+    trigger_config:
+      size: 3
+      gap: 2
+      location: 0  # 0:左上角, 1:右上角, 2:左下角, 3:右下角
+      pattern: "single_row"  # 或 "scattered", "checkerboard"
+  
+  cifar10:
+    path: "data/cifar-10-batches-py"
+    num_classes: 10
+    target_class: "bird"  # DBA目标类，类别2
+    trigger_config:
+      size: 4
+      gap: 3
+      location: 0  # 0:左上角, 1:右上角, 2:左下角, 3:右下角
+      pattern: "single_row"  # 或 "scattered", "checkerboard"
+  
+  cifar100:
+    path: "data/cifar-100-python"
+    num_classes: 100
+    target_class: 2
+    trigger_config:
+      size: 4
+      gap: 3
+      location: 0  # 0:左上角, 1:右上角, 2:左下角, 3:右下角
+      pattern: "single_row"  # 或 "scattered", "checkerboard"
+  
+  coco:
+    path: "data/coco"
+    num_classes: 80
+    target_class: 0
+    trigger_config:
+      size: 8
+      gap: 4
+      location: 0
+      pattern: "single_row"
+  
+  tinyimagenet:
+    path: "data/tiny-imagenet-200"
+    num_classes: 200
+    target_class: 0
+    trigger_config:
+      size: 5
+      gap: 4
+      location: 0
+      pattern: "single_row"
+
+# 联邦学习配置
+federated_learning:
+  num_clients: 100
+  clients_per_round: 50  # 修改为50，使sketch_dim=8更合理
+  
+  # 数据分布
+  data_distribution:
+    iid: false
+    non_iid_alpha:
+      mnist: 0.5
+      cifar10: 0.5
+      cifar100: 1.0
+      coco: 1.0
+      tinyimagenet: 1.0
+  
+  # 训练轮数
+  total_rounds:
+    mnist: 300
+    cifar10: 600
+    cifar100: 600
+    coco: 800
+    tinyimagenet: 500
+  
+  # 学习率
+  learning_rates:
+    mnist:
+      benign: 0.01
+      malicious: 0.01
+    cifar10:
+      benign: 0.01
+      malicious: 0.01
+    cifar100:
+      benign: 0.01
+      malicious: 0.01
+    coco:
+      benign: 0.001
+      malicious: 0.001
+    tinyimagenet:
+      benign: 0.01
+      malicious: 0.01
+    tinyimagenet_resnet50:
+      benign: 0.005
+      malicious: 0.005
+  
+  # 本地训练轮数
+  local_epochs:
+    mnist:
+      benign: 2
+      malicious: 2
+    cifar10:
+      benign: 2
+      malicious: 2
+    cifar100:
+      benign: 2
+      malicious: 2
+    coco:
+      benign: 1
+      malicious: 1
+    tinyimagenet:
+      benign: 2
+      malicious: 2
+  
+  # 优化器配置
+  optimizer:
+    momentum: 0.9
+    weight_decay: 0.0005
+    gradient_clip: 5.0
+
+# DBA攻击配置
+dba_attack:
+  trigger:
+    num_sub_triggers: 4
+    sub_trigger_size: 3
+    trigger_strength: 5.0
+
+# RAIA防御配置
+raia_defense:
+  # 风险打分器
+  risk_scorer:
+    mvp:
+      features:
+        - "cosine_similarity"
+        - "direction_deviation"
+        - "l2_norm"
+        - "layer_ratio"
+        - "sign_consistency"
+      normalization: "robust_z_score"
+      aggregation: "linear"
+  
+  # 阈值学习配置
+  threshold_method: "GMM"  # 或 "GMM", "fixed_percentile"
+  threshold_config:
+    mad_multiplier: 2.5  # 平衡点：2.0(严格) → 2.5(适中) → 3.0(宽松)
+    percentile: 80  # Fixed Percentile方法使用
+  
+  # 交错分块聚合
+  interleaved_aggregation:
+    block_sizes: [16, 32, 64]
+    sub_aggregator: "coordinate_median"
+    trim_ratio: 0.1
+
+# 防御方法配置
+defenses:
+  FLTrust:
+    root_dataset_size: 200
+    trust_threshold: 0.1
+  
+  TrimmedMean:
+    trim_ratio: 0.1
+  
+  CoordinateMedian:
+    {}
+  
+  RFA:
+    threshold: 2.0
+  
+  FLShield:
+    keep_ratio: 0.5       # 保留代表更新的比例
+    clip_coef: 10.0       # 中值范数裁剪系数
+    max_val_batches: 10   # 验证集最大批次数
+  
+  # Krum:
+  #   num_selected: 5
+  
+  FoolsGold:
+    learning_rate: 0.1
+  
+  SAGE:
+    sketch_dim: 8                # r ∈ {5, 8, 16} - sketch维度（必须 < n=10）
+    shrinkage_alpha: 0.6         # α ∈ {0.5, 0.6, 0.7} - 收缩参数（提高正则化）
+    lambda_reg: 0.01             # λ ∈ {0.005, 0.01, 0.05} - 白化正则化（提高稳定性）
+    tukey_c_quantile: 0.75       # Tukey阈值分位数（降低阈值以识别异常）
+    ema_beta: 0.9                # β ∈ [0.8, 0.9] - EMA系数
+    w_min: 0.00001               # 最小权重（降低以允许完全过滤）
+    use_ema: true                # 是否使用EMA跨轮更新
+    reuse_projection: true       # 是否跨轮复用投影矩阵R
+    seed: 42                     # 随机种子
+
+# FedDiAL配置
+feddial:
+  enable: false  # 是否启用FedDiAL模式
+  backbone_type: "resnet18"  # 预训练backbone类型
+  d_dim: 256  # discrimination head输出维度
+  freeze_backbone: true  # 是否冻结backbone
+  feature_cache: true  # 是否缓存特征
+  cache_dir: "data/feature_cache"  # 特征缓存目录
+  
+  # 训练配置
+  training:
+    phase_switch: "every_round"  # 阶段切换策略: "every_round" 或 "manual"
+    use_udf_loss: false  # 是否使用UDF loss（结合CE+Triplet+Center）
+    triplet_margin: 0.1  # Triplet loss的margin
+    lambda_triplet: 1.0  # Triplet loss权重
+    lambda_center: 0.001  # Center loss权重
+    local_epochs_per_phase: 1  # 每阶段本地训练轮数
+    grad_clip: 10.0  # 梯度裁剪阈值
+  
+  # 伪标签配置
+  pseudo_label:
+    enable: true  # 是否启用伪标签
+    period: 3  # 每N轮执行一次伪标签
+    confidence_quantile: 0.75  # 置信度分位数阈值
+    require_agreement: true  # 是否要求模型预测和中心预测一致
+    support_ratio: 0.1  # support set比例
+    min_support_per_class: 1  # 每类最少support样本数
+  
+  # 个性化微调配置
+  personalization:
+    enable: false  # 是否启用个性化微调
+    fine_tune_lr: 0.0001  # 微调学习率
+    fine_tune_epochs: 1  # 微调轮数
+
+# 评估配置
+evaluation:
+  metrics:
+    - "accuracy"
+    - "asr"
+    - "defense_effectiveness"
+  
+  asr_types:
+    - "full"
+    - "partial_23"
+    - "shift"
+    - "scale"
+    - "target"
+    - "overall"
