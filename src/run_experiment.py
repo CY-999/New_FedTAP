@@ -18,7 +18,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.models import ResNet18, ResNet18_TinyImageNet, ResNet50, ResNet50_TinyImageNet, ViT_B16_CIFAR10, ViT_B16_TinyImageNet
-from src.defenses import create_defense, create_raia_plus, create_raia_mvp, create_ablation_defense
+from src.defenses import create_defense
+# create_raia_plus, create_raia_mvp, create_ablation_defense
 from src.attacks import create_attack, DBA_Evaluator
 from src.data import create_dataset, create_federated_loader, create_validation_loader
 from src.data.datasets import CIFAR10Dataset, CIFAR100Dataset, TinyImageNetDataset
@@ -83,7 +84,6 @@ class ExperimentRunner:
 
         with open(self.config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
-
     def _set_seeds(self, experiment_config: Dict[str, Any] = None):
 
         if experiment_config and 'seed' in experiment_config:
@@ -564,9 +564,7 @@ class ExperimentRunner:
             bn_mask = create_bn_mask(global_model, self.device)
 
             aggregated_update, defense_stats = self._aggregate_updates(
-                global_model, client_updates, bn_mask, round_num, config
-            )
-
+                global_model, client_updates, bn_mask, round_num, config, selected_clients)
             params_before = global_model.get_parameters()
             self.logger.info(f"||θ||2_before={torch.linalg.norm(params_before):.4e}")
 
@@ -816,7 +814,7 @@ class ExperimentRunner:
 
     def _aggregate_updates(self, global_model, client_updates: List[torch.Tensor],
                           bn_mask: torch.Tensor, round_num: int,
-                          config: Dict[str, Any]) -> Tuple[torch.Tensor, Dict]:
+                          config: Dict[str, Any],selected_clients=None) -> Tuple[torch.Tensor, Dict]:
 
         if self.defense is None:
 
@@ -847,6 +845,18 @@ class ExperimentRunner:
                 aggregate_kwargs['device'] = self.device
             if 'global_model_obj' in params:
                 aggregate_kwargs['global_model_obj'] = global_model
+            # FedTAP / 任何需要稳定 client id 的方法
+            if 'client_ids' in params:
+                aggregate_kwargs['client_ids'] = selected_clients
+
+            # FedTAP: round number（用于统计与调试；proposal 是按 t 更新 τ/θ 的）
+            if 'round_num' in params:
+                aggregate_kwargs['round_num'] = round_num
+
+            # size weights：用每个客户端持有的样本数（federated_loader 里有 client_indices）
+            if 'size_weights' in params and selected_clients is not None:
+                sizes = [len(self.federated_loader.client_indices[cid]) for cid in selected_clients]
+                aggregate_kwargs['size_weights'] = sizes
 
             aggregated_update, defense_stats = self.defense.aggregate(**aggregate_kwargs)
 

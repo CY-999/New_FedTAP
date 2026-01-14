@@ -4,11 +4,12 @@ from .baselines import (
     BaseDefense, FedAvg, FedBN, FedProx, CoordinateMedian,
     TrimmedMean, GeoMedian, FLTrust, FoolsGold, NoisyAggregation, RFA, FLShield, FLAME
 )
-from .raiastat import create_raia_plus
-from .raia import create_raia_mvp
-from .sage import create_sage
-from .sage_history import create_sage_history
-from .raiastat_ablation_v2 import create_ablation_defense_v2, ABLATION_MODES
+from .FedTAP import FedTAP
+# from .raiastat import create_raia_plus
+# from .raia import create_raia_mvp
+# from .sage import create_sage
+# from .sage_history import create_sage_history
+# from .raiastat_ablation_v2 import create_ablation_defense_v2, ABLATION_MODES
 
 def create_defense(defense_name: str, config: Dict[str, Any] = None) -> BaseDefense:
 
@@ -52,5 +53,7 @@ def create_defense(defense_name: str, config: Dict[str, Any] = None) -> BaseDefe
         return create_sage(config)
     elif defense_name == 'SAGEHistory':
         return create_sage_history(config)
+    elif defense_name == 'FedTAP':
+        return FedTAP(config)
     else:
         raise ValueError(f"未知的防御方法: {defense_name}")

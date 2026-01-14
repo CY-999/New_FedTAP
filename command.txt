@@ -1,0 +1,31 @@
+minmax-FLTrust
+
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"minmax"}' \
+  > run1.log 2>&1 &
+
+
+minmax-FedTAP
+
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"minmax"}' \
+  > run3.log 2>&1 &
+
+tail -f run3.log
+
+alie-FLTrust
+
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"alie"}' \
+  > run2.log 2>&1 &
+
+
+alie-FedTAP
+
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":" alie"}' \
+  > run4.log 2>&1 &

@@ -196,6 +196,48 @@ defenses:
     reuse_projection: true       # 是否跨轮复用投影矩阵R
     seed: 42                     # 随机种子
 
+    
+# FedTAP配置
+  FedTAP:
+    # predictor (Eq.3-4)
+    K: 3
+    gamma_pred: 0.95
+    rho: 1e-4
+    W_pred: 20
+
+    # PCA subspace (Eq.7)
+    W_pca: 20
+    var_retained: 0.90
+    subspace_dim_max: 16
+
+    # fusion (Eq.9)
+    alpha: 1.0
+    beta: 1.0
+
+    # credibility (Eq.10) & tau update (Eq.12)
+    gamma_tau: 0.90
+    c_tau: 3.0
+
+    # trust propagation (Eq.11) + hysteresis
+    beta_theta: 0.90
+    hysteresis_th: 0.30
+    hysteresis_up_factor: 0.25
+
+    # isolation
+    theta_min: 0.30
+    isolation_L: 3
+    cooldown_rounds: 3
+
+    # weight mapping (Eq.13)
+    lambda: 5.0
+
+    # candidate global (Eq.5)
+    eta: 1.0
+
+    # efficiency (proposal里的 d_eff 可由该项控制；不填则使用全参数)
+    max_features_per_layer: 4096
+
+
 # FedDiAL配置
 feddial:
   enable: false  # 是否启用FedDiAL模式
@@ -244,3 +286,4 @@ evaluation:
     - "scale"
     - "target"
     - "overall"
+

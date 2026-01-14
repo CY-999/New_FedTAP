@@ -1,0 +1,26 @@
+# ===== Python bytecode =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== Python cache =====
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# ===== VSCode =====
+.vscode/
+
+# ===== Logs =====
+*.log
+runs/**/logs/
+nohup.out
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# experiment outputs
+runs/
+plots/
