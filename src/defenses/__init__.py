@@ -13,5 +13,5 @@ __all__ = [
     'TrimmedMean', 'GeoMedian', 'FLTrust', 'FoolsGold', 'FLAME', 'NoisyAggregation', 'FLShield',
     'RAIA_Defense', 'RAIA_Statistical_Defense', 'AblationDefense', 'AblationDefenseV2',
     'create_raia_plus', 'create_raia_mvp', 'create_ablation_defense', 'create_ablation_defense_v2',
-    'create_defense', 'ABLATION_MODES',
+    'create_defense', 'ABLATION_MODES',"FedTAP"
 ]

@@ -22,5 +22,5 @@ nohup.out
 Thumbs.db
 
 # experiment outputs
-runs/
-plots/
+runs*/
+plots*/

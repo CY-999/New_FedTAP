@@ -1,31 +1,196 @@
-minmax-FLTrust
-
-nohup python run_experiment.py \
-  --config experiment_config.yaml \
-  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"minmax"}' \
-  > run1.log 2>&1 &
-
-
 minmax-FedTAP
 
 nohup python run_experiment.py \
   --config experiment_config.yaml \
-  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"minmax"}' \
-  > run3.log 2>&1 &
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"minmax","malicious_ratio":0.2}' \
+  > minmax_fedtap.log 2>&1 &
 
-tail -f run3.log
 
-alie-FLTrust
+minmax-FLTrust
 
 nohup python run_experiment.py \
   --config experiment_config.yaml \
-  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"alie"}' \
-  > run2.log 2>&1 &
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"minmax","malicious_ratio":0.2}' \
+  > minmax_fltrust.log 2>&1 &
+
+
+
+alie-FLTrust
+
+CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"alie","malicious_ratio":0.2}' \
+  > alie_fltrust.log 2>&1 &
 
 
 alie-FedTAP
 
 nohup python run_experiment.py \
   --config experiment_config.yaml \
-  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":" alie"}' \
-  > run4.log 2>&1 &
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"alie","malicious_ratio":0.2}' \
+  > alie_fedtap.log 2>&1 &
+
+
+ipm-Fltrust
+CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"ipm","malicious_ratio":0.2}' \
+  > ipm_fltrust.log 2>&1 &
+
+
+ipm-FedTAP
+CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"ipm","malicious_ratio":0.2}' \
+  > ipm_fedtap.log 2>&1 &
+
+
+labelflip-fedtap
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FedTAP","attack_mode":"label_flip","malicious_ratio":0.2,"poison_ratio":0.2,"random_flip":true}' \
+  > labelflip_random_fedtap.log 2>&1 &
+
+
+labelflip-fltrust
+CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLTrust","attack_mode":"label_flip","malicious_ratio":0.2,"poison_ratio":0.2,"random_flip":true}' \
+  > labelflip_random_fltrust.log 2>&1 &
+
+
+
+##统一命令模板
+nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"DEF","attack_mode":"ATT","malicious_ratio":0.2,"seed":S}' \
+  > LOG.log 2>&1 &
+
+待做实验如下：
+pure_minmax
+  fedavg
+  nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_fedavg.log 2>&1 &
+  Fltrust
+  nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fltrust","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_fltrust.log 2>&1 &
+  FedTAP
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedtap","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_fedtap.log 2>&1 &
+  Trimmed-mean
+  nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"trimmedmean","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_trimmedmean.log 2>&1 &
+  foolsgold
+  nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"foolsgold","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_foolsgold.log 2>&1 &
+  flame
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"FLAME","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_flame.log 2>&1 &
+  flshield
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"flshield","attack_mode":"pure_minmax","malicious_ratio":0.2}' \
+    > pure_minmax_flshield.log 2>&1 &
+
+
+pure_ipm
+  fedavg
+  nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"pure_ipm","malicious_ratio":0.2}' \
+    > pure_ipm_fedavg.log 2>&1 &
+  Fltrust
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fltrust","attack_mode":"pure_ipm","malicious_ratio":0.2}' \
+    > pure_ipm_fltrust.log 2>&1 &
+  FedTAP
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedtap","attack_mode":"pure_ipm","malicious_ratio":0.2}' \
+    > pure_ipm_fedtap.log 2>&1 &
+
+alie
+  fedavg
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"alie","alie_mode":"prevent_convergence","malicious_ratio":0.2}' \
+  > alie_fedtap.log 2>&1 &
+  
+  fedtap/fltrust已完成
+
+untargeted_label_flip
+  fedavg
+  nohup python run_experiment.py \
+  --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"untargeted_label_flip","malicious_ratio":0.2,"poison_ratio":0.5}' \
+  > ulabel_flip_fedavg.log 2>&1 &
+  
+  fltrust/fedtap已完成
+
+DBA
+  a_m
+    fedavg
+    CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"a_m","malicious_ratio":0.2,"poison_ratio":0.2}' \
+    > dba_multiround_fedavg.log 2>&1 &
+    Fltrust
+    nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fltrust","attack_mode":"a_m","malicious_ratio":0.2,"poison_ratio":0.2}' \
+    > dba_multiround_fltrust.log 2>&1 &
+    FedTAP
+    CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedtap","attack_mode":"a_m","malicious_ratio":0.2,"poison_ratio":0.2}' \
+    > dba_multiround_fedtap.log 2>&1 &
+    Trimmed-mean
+    nohup python run_experiment.py --config experiment_config.yaml \
+    --experiment '{"dataset":"cifar10","model":"resnet18","defense":"Trimmedmean","attack_mode":"a_m","malicious_ratio":0.2,"poison_ratio":0.2}' \
+    > dba_multiround_trimmedmean.log 2>&1 &
+  a_s
+  .....
+
+Tail backdoor
+  fedavg
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"attack_of_the_tails","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > tail_fedavg.log 2>&1 &
+  fltrust
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fltrust","attack_mode":"attack_of_the_tails","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > tail_fltrust.log 2>&1 &
+  fedtap
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedtap","attack_mode":"attack_of_the_tails","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > tail_fedtap.log 2>&1 &
+
+semantic_attack
+  fedavg
+  CUDA_VISIBLE_DEVICES=1 nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedavg","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_fedavg.log 2>&1 &
+  fltrust
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fltrust","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_fltrust.log 2>&1 &
+  fedtap
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"fedtap","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_fedtap.log 2>&1 &
+  Trimmedmean
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"Trimmedmean","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_trimmedmean.log 2>&1 &
+  foolsgold
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"foolsgold","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_foolsgold.log 2>&1 &
+  flame
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"flame","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_flame.log 2>&1 &  
+  flshield
+  nohup python run_experiment.py --config experiment_config.yaml \
+  --experiment '{"dataset":"cifar10","model":"resnet18","defense":"flshield","attack_mode":"semantic_attack","malicious_ratio":0.2,"poison_ratio":0.2}' \
+  > semantic_flshield.log 2>&1 &
+

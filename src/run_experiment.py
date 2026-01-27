@@ -45,22 +45,12 @@ class ExperimentRunner:
                 attack_mode = experiment_config.get('attack_mode', 'dba')
                 defense = experiment_config.get('defense', 'FedAvg')
 
-                if attack_mode.lower() in ['a_m', 'a_s', 'dba', 'dba_multiround', 'dba_singleround']:
-                    attack_type = 'dba'
-                elif 'ipm' in attack_mode.lower() or 'inner_product' in attack_mode.lower():
-                    attack_type = 'ipm'
-                elif 'minmax' in attack_mode.lower() or 'min_max' in attack_mode.lower():
-                    attack_type = 'minmax'
-                elif 'alie' in attack_mode.lower():
-                    attack_type = 'alie'
-                elif 'label_flip' in attack_mode.lower():
-                    attack_type = 'label_flip'
-                else:
-                    attack_type = attack_mode.lower()
+                attack_dir_name = str(attack_mode)
+                attack_dir_name = attack_dir_name.replace('/', '_').replace('\\', '_').replace(' ', '')
 
-                defense_name = defense.lower().replace('_', '')
+                defense_name = str(defense).lower().replace('_', '')
 
-                output_base = Path(f'runs/{dataset}/{attack_type}')
+                output_base = Path('runs') / str(dataset) / attack_dir_name
                 output_base.mkdir(parents=True, exist_ok=True)
                 self.output_dir = output_base / defense_name
             else:
@@ -283,37 +273,40 @@ class ExperimentRunner:
 
         if defense_lower == 'fedavg':
             return None
-        elif defense_name == 'RAIA_MVP' or defense_lower == 'raia':
+        
+        # elif defense_name == 'RAIA_MVP' or defense_lower == 'raia':
 
-            merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
-            return create_raia_mvp(merged_config)
-        elif defense_name == 'RAIA_STAT' or defense_lower == 'raiastat' or defense_lower == 'raia_stat':
+        #     merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
+        #     return create_raia_mvp(merged_config)
+        # elif defense_name == 'RAIA_STAT' or defense_lower == 'raiastat' or defense_lower == 'raia_stat':
 
-            merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
-            return create_raia_plus(merged_config)
+        #     merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
+        #     return create_raia_plus(merged_config)
 
-        elif defense_name.startswith('RAIA_ABLATION_'):
-            ablation_mode = defense_name.replace('RAIA_ABLATION_', '').lower()
-            merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
-            return create_ablation_defense(ablation_mode, merged_config)
+        # elif defense_name.startswith('RAIA_ABLATION_'):
+        #     ablation_mode = defense_name.replace('RAIA_ABLATION_', '').lower()
+        #     merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
+        #     return create_ablation_defense(ablation_mode, merged_config)
 
-        elif defense_name.startswith('RAIA_ABL_V2_'):
-            from src.defenses.raiastat_ablation_v2 import create_ablation_defense_v2
-            ablation_mode = defense_name.replace('RAIA_ABL_V2_', '').lower()
-            merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
-            return create_ablation_defense_v2(ablation_mode, merged_config)
+        # elif defense_name.startswith('RAIA_ABL_V2_'):
+        #     from src.defenses.raiastat_ablation_v2 import create_ablation_defense_v2
+        #     ablation_mode = defense_name.replace('RAIA_ABL_V2_', '').lower()
+        #     merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
+        #     return create_ablation_defense_v2(ablation_mode, merged_config)
 
-        elif defense_name.startswith('RAIA_PAPER_'):
-            from src.defenses.raiastat_ablation_paper import create_paper_ablation
-            ablation_mode = defense_name.replace('RAIA_PAPER_', '').lower()
-            merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
-            return create_paper_ablation(ablation_mode, merged_config)
+        # elif defense_name.startswith('RAIA_PAPER_'):
+        #     from src.defenses.raiastat_ablation_paper import create_paper_ablation
+        #     ablation_mode = defense_name.replace('RAIA_PAPER_', '').lower()
+        #     merged_config = {**self.config.get('raia_defense', {}), **exp_defense_config}
+        #     return create_paper_ablation(ablation_mode, merged_config)
         elif defense_lower == 'trimmedmean' or defense_name == 'TrimmedMean':
             return create_defense('TrimmedMean', self.config.get('defenses', {}).get('TrimmedMean', {'trim_ratio': 0.1}))
         elif defense_lower == 'coordinatemedian' or defense_name == 'CoordinateMedian':
             return create_defense('CoordinateMedian', self.config.get('defenses', {}).get('CoordinateMedian', {}))
         elif defense_lower == 'rfa' or defense_name == 'RFA':
             return create_defense('RFA', self.config.get('defenses', {}).get('RFA', {}))
+        elif defense_lower == 'foolsgold' or defense_name == 'FoolsGold':
+            return create_defense('FoolsGold', self.config.get('defenses', {}).get('FoolsGold', {'learning_rate': 0.1}))
         elif defense_lower == 'fltrust' or defense_name == 'FLTrust':
             return create_defense('FLTrust', self.config.get('defenses', {}).get('FLTrust', {'root_dataset_size': 200, 'trust_threshold': 0.1}))
         elif defense_lower == 'flshield' or defense_name == 'FLShield':
@@ -326,6 +319,9 @@ class ExperimentRunner:
 
             merged_config = {**self.config.get('defenses', {}).get('SAGE', {}), **exp_defense_config}
             return create_defense('SAGEHistory', merged_config)
+       
+        elif defense_name == 'FedTAP' or defense_lower == 'fedtap':
+            return create_defense('FedTAP', self.config.get('defenses', {}).get('FedTAP', {}))
         else:
             defense_config = self.config.get('defenses', {}).get(defense_name, {})
             return create_defense(defense_name, defense_config)
@@ -350,6 +346,8 @@ class ExperimentRunner:
         }
 
         attack_type_lower = attack_mode.lower()
+        if attack_type_lower in ['pure_ipm', 'pure_minmax']:
+            return create_attack(attack_type_lower, attack_config)
 
         if 'ipm' in attack_type_lower or 'inner_product' in attack_type_lower:
             attack_config['scale_factor'] = config.get('scale_factor', 2.5)
@@ -361,7 +359,8 @@ class ExperimentRunner:
             attack_config['trigger_location'] = config.get('trigger_location', 'bottom_right')
             attack_config['use_model_poisoning'] = config.get('use_model_poisoning', True)
             attack_config['model_poison_strength'] = config.get('model_poison_strength', 0.1)
-            return create_attack('ipm', attack_config)
+            attack_type = 'adaptive_ipm' if attack_type_lower == 'adaptive_ipm' else 'ipm'
+            return create_attack(attack_type, attack_config)
 
         elif 'alie' in attack_type_lower:
             attack_config['attack_mode'] = config.get('alie_mode', 'prevent_convergence')
@@ -558,13 +557,13 @@ class ExperimentRunner:
                     else:
                         self.logger.info(f"客户端 {c} 未执行攻击")
 
-            client_updates = self._train_clients(global_model, selected_clients, round_num, config,
+            update_client_ids, client_updates = self._train_clients(global_model, selected_clients, round_num, config,
                                                  active_malicious_clients=malicious_clients)
 
             bn_mask = create_bn_mask(global_model, self.device)
 
             aggregated_update, defense_stats = self._aggregate_updates(
-                global_model, client_updates, bn_mask, round_num, config, selected_clients)
+                global_model, client_updates, bn_mask, round_num, config, update_client_ids)
             params_before = global_model.get_parameters()
             self.logger.info(f"||θ||2_before={torch.linalg.norm(params_before):.4e}")
 
@@ -668,7 +667,7 @@ class ExperimentRunner:
 
     def _train_clients(self, global_model, selected_clients: List[int],
                       round_num: int, config: Dict[str, Any],
-                      active_malicious_clients: List[int] = None) -> List[torch.Tensor]:
+                      active_malicious_clients: List[int] = None)->Tuple[List[int], List[torch.Tensor]]:
 
         client_updates = []
         benign_updates = []
@@ -731,7 +730,8 @@ class ExperimentRunner:
                 benign_updates.append((client_id, client_update))
 
         if hasattr(self.attack, 'manipulate_update') and self.attack.should_attack(round_num):
-
+            
+            update_client_ids = [cid for cid, _ in benign_updates]
             client_updates = [u for _, u in benign_updates]
 
             for client_id, malicious_update in malicious_clients_this_round:
@@ -740,6 +740,7 @@ class ExperimentRunner:
                     benign_updates=[u for _, u in benign_updates] if len(benign_updates) > 0 else None,
                     global_model_params=global_model.get_parameters()
                 )
+                update_client_ids.append(client_id)
                 client_updates.append(manipulated_update)
         elif hasattr(self.attack, 'manipulate_updates') and self.attack.should_attack(round_num):
 
@@ -757,13 +758,13 @@ class ExperimentRunner:
                 global_model,
                 **backdoor_kwargs
             )
-
+            update_client_ids = all_clients
             client_updates = manipulated_updates
         else:
-
+            update_client_ids = [cid for cid, _ in benign_updates] + [cid for cid, _ in malicious_clients_this_round]
             client_updates = [u for _, u in benign_updates] + [u for _, u in malicious_clients_this_round]
 
-        return client_updates
+        return update_client_ids, client_updates
 
     def _compute_root_gradient(self, global_model, config):
 
@@ -814,7 +815,7 @@ class ExperimentRunner:
 
     def _aggregate_updates(self, global_model, client_updates: List[torch.Tensor],
                           bn_mask: torch.Tensor, round_num: int,
-                          config: Dict[str, Any],selected_clients=None) -> Tuple[torch.Tensor, Dict]:
+                          config: Dict[str, Any],client_ids: List[int]) -> Tuple[torch.Tensor, Dict]:
 
         if self.defense is None:
 
@@ -847,19 +848,10 @@ class ExperimentRunner:
                 aggregate_kwargs['global_model_obj'] = global_model
             # FedTAP / 任何需要稳定 client id 的方法
             if 'client_ids' in params:
-                aggregate_kwargs['client_ids'] = selected_clients
-
-            # FedTAP: round number（用于统计与调试；proposal 是按 t 更新 τ/θ 的）
-            if 'round_num' in params:
-                aggregate_kwargs['round_num'] = round_num
-
-            # size weights：用每个客户端持有的样本数（federated_loader 里有 client_indices）
-            if 'size_weights' in params and selected_clients is not None:
-                sizes = [len(self.federated_loader.client_indices[cid]) for cid in selected_clients]
-                aggregate_kwargs['size_weights'] = sizes
+                aggregate_kwargs['client_ids'] = client_ids
 
             aggregated_update, defense_stats = self.defense.aggregate(**aggregate_kwargs)
-
+        
         return aggregated_update, defense_stats
 
     def _evaluate_model(self, model, round_num: int) -> Dict[str, float]:
