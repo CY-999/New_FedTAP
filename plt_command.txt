@@ -7,13 +7,13 @@ python draft/plt.py --dataset cifar10 --attack ipm --runs_dir runs --out_dir plo
 python draft/plt.py --dataset cifar10 --attack label_flip --runs_dir runs --out_dir plots1 --end_round 200
 
 # DBA
-python draft/plt.py --dataset cifar10 --attack a_m --runs_dir runs --out_dir plots --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack a_m --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
 
 # Tail
-python draft/plt.py --dataset cifar10 --attack attack_of_the_tails --runs_dir runs --out_dir plots --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack attack_of_the_tails --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
 
 # Semantic
-python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
 
 # All
 python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200

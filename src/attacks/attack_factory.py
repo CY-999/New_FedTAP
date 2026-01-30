@@ -9,7 +9,7 @@ from .semantic_attack import SemanticBackdoorAttack, AdaptiveSemanticAttack, Com
 from .minmax_attack import MinMaxAttack
 from .alie_attack import ALIEAttack, AdaptiveALIEAttack
 from .pure_model_poisoning import PureIPMAttack, PureMinMaxAttack, LabelFlipAttack
-
+from .lga_attack import LGA_Attack
 def create_attack(attack_type: str, config: Dict[str, Any]) -> BaseAttack:
 
     attack_type = attack_type.lower().strip()
@@ -55,6 +55,8 @@ def create_attack(attack_type: str, config: Dict[str, Any]) -> BaseAttack:
         return PureMinMaxAttack(config)
     elif attack_type in ['label_flip', 'labelflip']:
         return LabelFlipAttack(config)
+    elif attack_type in ['lga', 'lga_attack']:
+        return LGA_Attack(config)
 
     else:
         raise ValueError(f"未知的攻击类型: {attack_type}")
@@ -79,6 +81,7 @@ def get_supported_attacks() -> Dict[str, str]:
         'pure_ipm': '纯IPM攻击（无后门，仅模型投毒）',
         'pure_minmax': '纯MinMax攻击（无后门，仅模型投毒）',
         'label_flip': '标签翻转攻击（无后门）',
+        'lga': 'LGA攻击（Layer-wise Gradient Alignment）',
     }
 
 def print_supported_attacks():

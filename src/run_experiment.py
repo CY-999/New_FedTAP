@@ -375,8 +375,17 @@ class ExperimentRunner:
             attack_type = 'adaptive_alie' if config.get('adaptive', False) else 'alie'
             return create_attack(attack_type, attack_config)
 
-        if attack_type_lower in ['a_m', 'a_s', 'dba', 'dba_multiround', 'dba_singleround']:
+        if attack_type_lower in ['a_m', 'a_s', 'dba', 'dba_multiround', 'dba_singleround', 'lga', 'lga_attack']:
+            self.logger.info(
+                "[AttackCfg] mode=%s dataset=%s trigger_config=%s dba_trigger=%s",
+                attack_type_lower, dataset_name,
+                attack_config.get('trigger_config'),
+                self.config.get('dba_attack', {}).get('trigger', {})
+            )
+            
+            # 1) trigger_config：强制来自 datasets.<dataset>.trigger_config（不同数据集不同设置）
             trigger_cfg = self.config['datasets'][dataset_name].get('trigger_config', {})
+            # 2) dba_attack.trigger：强制来自 dba_attack.trigger（全局 DBA 触发器拆分配置）
             dba_cfg = self.config.get('dba_attack', {}).get('trigger', {})
 
             attack_config['trigger_config'] = {
@@ -386,11 +395,20 @@ class ExperimentRunner:
                 'pattern': trigger_cfg.get('pattern', 'single_row'),
                 'num_sub_triggers': dba_cfg.get('num_sub_triggers', 4)
             }
+            
             attack_config['trigger_strength'] = dba_cfg.get('trigger_strength', 5.0)
 
             if attack_type_lower in ['a_s', 'dba_singleround']:
                 attack_config['replacement_round'] = config.get('replacement_round', 50)
                 attack_config['scale_factor'] = config.get('scale_factor', 100)
+
+            if attack_type_lower in ['lga', 'lga_attack']:
+                lga_yaml = self.config.get('lga_attack', {})
+                attack_config['alignment_frequency'] = config.get('alignment_frequency', lga_yaml.get('alignment_frequency', 1))
+                attack_config['layer_wise_alignment'] = config.get('layer_wise_alignment', lga_yaml.get('layer_wise_alignment', True))
+                attack_config['min_scale_factor'] = config.get('min_scale_factor', lga_yaml.get('min_scale_factor', 0.0))
+                attack_config['max_scale_factor'] = config.get('max_scale_factor', lga_yaml.get('max_scale_factor', 1.0))
+
 
         elif 'label_flip' in attack_type_lower:
             source_class = config.get('source_class', 1)
@@ -557,13 +575,43 @@ class ExperimentRunner:
                     else:
                         self.logger.info(f"客户端 {c} 未执行攻击")
 
+            # ===== LGA hook: update reference global update (Δθ_g^{t-1}) =====
+            if hasattr(self.attack, "update_global_model"):
+                try:
+                    self.attack.update_global_model(global_model)
+                except Exception as e:
+                    self.logger.warning(f"[LGA] update_global_model failed: {e}")
             update_client_ids, client_updates = self._train_clients(global_model, selected_clients, round_num, config,
                                                  active_malicious_clients=malicious_clients)
-
+            
             bn_mask = create_bn_mask(global_model, self.device)
 
             aggregated_update, defense_stats = self._aggregate_updates(
                 global_model, client_updates, bn_mask, round_num, config, update_client_ids)
+            
+            # ---- FedTAP: minimal decisive logs (strict entry + periodic) ----
+            if config.get("defense", "").lower() == "fedtap":
+                if isinstance(defense_stats, dict) and defense_stats.get("method", "") == "FedTAP":
+                    strict = int(bool(defense_stats.get("strict", False)))
+                    start_r = defense_stats.get("stable_start_round", None)
+                    agg_norm = float(defense_stats["agg_norm"])
+                    agg_frac = float(defense_stats["agg_norm_frac"])
+                    susp = float(defense_stats["suspicious_ratio"])
+
+                    # strict entry event (single line)
+                    if not hasattr(self, "_fedtap_last_strict"):
+                        self._fedtap_last_strict = 0
+                    if strict == 1 and self._fedtap_last_strict == 0:
+                        self.logger.info("[FedTAP] ENTER STRICT @ round=%d (stable_start=%s)", round_num + 1, str(start_r))
+                    self._fedtap_last_strict = strict
+
+                    # periodic (every 10 rounds) + always in strict
+                    if ((round_num + 1) % 10) == 0 or strict == 1:
+                        self.logger.info(
+                            "[FedTAP] strict=%d start=%s agg||Δ||2=%.4e frac=%.4e susp=%.2f",
+                            strict, str(start_r), agg_norm, agg_frac, susp
+                        )
+
             params_before = global_model.get_parameters()
             self.logger.info(f"||θ||2_before={torch.linalg.norm(params_before):.4e}")
 
@@ -701,7 +749,9 @@ class ExperimentRunner:
 
             client_model.train()
             local_epochs = self._get_local_epochs(config, is_malicious)
-
+            
+            step_count = 0
+            
             for epoch in range(local_epochs):
                 for data, targets in client_loader:
                     data, targets = data.to(self.device), targets.to(self.device)
@@ -718,6 +768,14 @@ class ExperimentRunner:
                                                  self.config['federated_learning']['optimizer']['gradient_clip'])
 
                     client_optimizer.step()
+                    step_count += 1
+
+                    # ===== LGA hook: layer-wise alignment after optimizer step =====
+                    if is_malicious and self.attack.should_attack(round_num) and hasattr(self.attack, "align_model_update"):
+                        try:
+                            self.attack.align_model_update(client_model, global_model, step_count)
+                        except Exception as e:
+                            self.logger.warning(f"[LGA] align_model_update failed (client={client_id}, step={step_count}): {e}")
 
             if is_malicious and hasattr(self.attack, 'apply_model_poisoning') and self.attack.should_attack(round_num):
                 self.attack.apply_model_poisoning(client_model, self.attack.target_class)

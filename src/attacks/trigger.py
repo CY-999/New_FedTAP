@@ -13,8 +13,6 @@ class TriggerGenerator:
         self.pattern = config.get('pattern', 'single_row')
         self.num_sub_triggers = config.get('num_sub_triggers', 4)
 
-        self.img_size = 32 if dataset == 'cifar10' else 64
-
     def add_trigger(self, images: torch.Tensor, sub_trigger_id: int = None) -> torch.Tensor:
 
         triggered_images = images.clone()
@@ -30,17 +28,23 @@ class TriggerGenerator:
         return triggered_images
 
     def _add_sub_trigger(self, images: torch.Tensor, sub_id: int) -> torch.Tensor:
-
         triggered = images.clone()
+
+        # ✅ 从数据本身取尺寸（适配 MNIST 28 / CIFAR 32 / TinyIN 64 / COCO 224）
+        H = int(images.shape[-2])
+        W = int(images.shape[-1])
 
         if self.trigger_location == 0:
             base_row, base_col = 0, 0
         elif self.trigger_location == 1:
-            base_row, base_col = 0, self.img_size - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1)
+            base_row, base_col = 0, W - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1)
         elif self.trigger_location == 2:
-            base_row, base_col = self.img_size - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1), 0
+            base_row, base_col = H - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1), 0
         else:
-            base_row, base_col = self.img_size - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1), self.img_size - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1)
+            base_row, base_col = (
+                H - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1),
+                W - self.trigger_size - self.trigger_gap * (self.num_sub_triggers - 1)
+            )
 
         if self.pattern == 'single_row':
             row = base_row
@@ -48,6 +52,7 @@ class TriggerGenerator:
             triggered[:, :, row:row+self.trigger_size, col:col+self.trigger_size] = 1.0
 
         return triggered
+
 
     def generate_test_images(self, images: torch.Tensor, trigger_type: str = 'full') -> Tuple[torch.Tensor, str]:
 

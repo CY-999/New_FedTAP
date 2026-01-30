@@ -15,7 +15,7 @@ from .semantic_attack import SemanticBackdoorAttack, AdaptiveSemanticAttack, Com
 from .minmax_attack import MinMaxAttack
 
 from .attack_factory import create_attack, get_supported_attacks, print_supported_attacks
-
+from .lga_attack import LGA_Attack,create_lga_attack
 __all__ = [
     'BaseAttack',
     'DBA_Attack', 'DBA_MultiRound', 'DBA_SingleRound', 'create_dba_attack', 'DBA_Evaluator', 'TriggerGenerator',
@@ -25,4 +25,5 @@ __all__ = [
     'SemanticBackdoorAttack', 'AdaptiveSemanticAttack', 'CompositeSemanticAttack',
     'MinMaxAttack',
     'create_attack', 'get_supported_attacks', 'print_supported_attacks',
+    'LGA_Attack', 'create_lga_attack',
 ]
