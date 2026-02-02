@@ -7,19 +7,28 @@ python draft/plt.py --dataset cifar10 --attack ipm --runs_dir runs --out_dir plo
 python draft/plt.py --dataset cifar10 --attack label_flip --runs_dir runs --out_dir plots1 --end_round 200
 
 # DBA
-python draft/plt.py --dataset cifar10 --attack a_m --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack a_m --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 # Tail
-python draft/plt.py --dataset cifar10 --attack attack_of_the_tails --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack attack_of_the_tails --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 # Semantic
-python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 # All
-python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200
+python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 #pure_ipm
-python draft/plt.py --dataset cifar10 --attack pure_ipm --runs_dir runs --out_dir plots --defenses all --end_round 200
+python draft/plt.py --dataset cifar10 --attack pure_ipm --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 #pure_minmax
-python draft/plt.py --dataset cifar10 --attack pure_minmax --runs_dir runs --out_dir plots --defenses all --end_round 200
+python draft/plt.py --dataset cifar10 --attack pure_minmax --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
+
+#untargeted_label_flip
+python draft/plt.py --dataset cifar10 --attack untargeted_label_flip --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
+
+#alie
+python draft/plt.py --dataset cifar10 --attack alie --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
+
+#lga
+python draft/plt.py --dataset cifar10 --attack lga --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 450 --smooth_sigma 2.0 --smooth_window 11

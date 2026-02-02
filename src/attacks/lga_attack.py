@@ -22,7 +22,7 @@ class LGA_Attack(DBA_MultiRound):
         
         self.alignment_frequency = config.get('alignment_frequency', 1)
         self.layer_wise_alignment = config.get('layer_wise_alignment', True)
-        self.min_scale_factor = config.get('min_scale_factor', 0.0)
+        self.min_scale_factor = config.get('min_scale_factor', 0.1)
         self.max_scale_factor = config.get('max_scale_factor', 1.0)
         
         self.prev_global_model = None  # θ_g^{t-2}

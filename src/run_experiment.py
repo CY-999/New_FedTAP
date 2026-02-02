@@ -346,6 +346,7 @@ class ExperimentRunner:
         }
 
         attack_type_lower = attack_mode.lower()
+        
         if attack_type_lower in ['pure_ipm', 'pure_minmax']:
             return create_attack(attack_type_lower, attack_config)
 
@@ -376,12 +377,6 @@ class ExperimentRunner:
             return create_attack(attack_type, attack_config)
 
         if attack_type_lower in ['a_m', 'a_s', 'dba', 'dba_multiround', 'dba_singleround', 'lga', 'lga_attack']:
-            self.logger.info(
-                "[AttackCfg] mode=%s dataset=%s trigger_config=%s dba_trigger=%s",
-                attack_type_lower, dataset_name,
-                attack_config.get('trigger_config'),
-                self.config.get('dba_attack', {}).get('trigger', {})
-            )
             
             # 1) trigger_config：强制来自 datasets.<dataset>.trigger_config（不同数据集不同设置）
             trigger_cfg = self.config['datasets'][dataset_name].get('trigger_config', {})
@@ -396,6 +391,9 @@ class ExperimentRunner:
                 'num_sub_triggers': dba_cfg.get('num_sub_triggers', 4)
             }
             
+            self.logger.info("[Trigger_Config] mode=%s dataset=%s trigger_config=%s",
+                 attack_type_lower, dataset_name, attack_config.get("trigger_config"))
+
             attack_config['trigger_strength'] = dba_cfg.get('trigger_strength', 5.0)
 
             if attack_type_lower in ['a_s', 'dba_singleround']:
@@ -408,8 +406,7 @@ class ExperimentRunner:
                 attack_config['layer_wise_alignment'] = config.get('layer_wise_alignment', lga_yaml.get('layer_wise_alignment', True))
                 attack_config['min_scale_factor'] = config.get('min_scale_factor', lga_yaml.get('min_scale_factor', 0.0))
                 attack_config['max_scale_factor'] = config.get('max_scale_factor', lga_yaml.get('max_scale_factor', 1.0))
-
-
+            
         elif 'label_flip' in attack_type_lower:
             source_class = config.get('source_class', 1)
             source_class = self._convert_class_to_int(source_class, dataset_name)

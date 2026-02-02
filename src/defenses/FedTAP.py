@@ -241,7 +241,7 @@ class FedTAP(BaseDefense):
                 return None
 
             grads_accum = grads_accum / float(seen)
-            return grads_accum / (grads_accum.norm() + eps)
+            return (-grads_accum) / (grads_accum.norm() + eps)
 
         except Exception:
             return None
@@ -442,8 +442,8 @@ class FedTAP(BaseDefense):
             sign_d[i] = 1.0 - match
 
             if g_val is not None and g_val.numel() == uf.numel():
-                cn = -torch.dot(g_val.to(torch.float32), uf) / (uf.norm() + eps)
-                contrib_d[i] = -cn
+                cos_g = torch.dot(g_val.to(torch.float32), uf) / (uf.norm() + eps)  # [-1, 1]
+                contrib_d[i] = 1.0 - cos_g  # 距离：越大越异常
             else:
                 contrib_d[i] = 0.0
 
@@ -501,6 +501,9 @@ class FedTAP(BaseDefense):
             proj = coef * ref_n
 
             th = float(theta_t[i].item())
+            if strict:
+                th = min(th, 0.70)   # theta_cap：建议 0.65~0.75
+
             if bool(isolated[i].item()):
                 u_clean = proj
             else:
@@ -510,7 +513,10 @@ class FedTAP(BaseDefense):
 
         # ---- robust norm clipping (median-based) ----
         norms = torch.tensor([p.to(torch.float32).norm().item() for p in purified], device=dev, dtype=torch.float32)
-        med_norm = float(norms.median().item())
+        if strict and (~suspicious).any():
+            med_norm = float(norms[~suspicious].median().item())
+        else:
+            med_norm = float(norms.median().item())
         clip_bound = clip_coef_eff * med_norm + eps
 
         clipped: List[torch.Tensor] = []

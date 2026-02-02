@@ -9,7 +9,7 @@ from matplotlib import rcParams
 font_family = "DejaVu Sans"
 font1 = {"family": font_family, "weight": "normal", "size": 80}
 font2 = {"family": font_family, "weight": "normal", "size": 65}
-font_legend = {"family": font_family, "weight": "normal", "size": 42}
+font_legend = {"family": font_family, "weight": "normal", "size": 30}
 Label_Size = 50
 
 bwith = 1.7
@@ -57,7 +57,7 @@ def pretty_defense(name: str) -> str:
 
 def is_backdoor_attack(attack_name: str) -> bool:
     a = str(attack_name).lower()
-    return any(k in a for k in ["a_m", "a_s", "dba", "tail", "attack_of_the_tails", "semantic"])
+    return any(k in a for k in ["a_m", "a_s", "dba", "tail", "attack_of_the_tails", "semantic","lga"])
 
 
 # ================= Load results.json =================
@@ -107,6 +107,38 @@ def align_on_union_rounds(all_rounds, series_dict):
                 yy[i] = float(y[idx[int(rr)]])
         aligned[name] = yy
     return aligned
+
+def gaussian_smooth_nan(y: np.ndarray, sigma: float, window: int) -> np.ndarray:
+    """
+    Gaussian smoothing that ignores NaNs.
+    - y: 1D array (may contain NaNs)
+    - sigma: Gaussian std; <=0 means no smoothing
+    - window: kernel size (odd). If <=1 means no smoothing
+    """
+    y = np.asarray(y, dtype=float)
+    if sigma is None or sigma <= 0 or window is None or window <= 1:
+        return y
+
+    # force odd window
+    if window % 2 == 0:
+        window += 1
+
+    half = window // 2
+    x = np.arange(-half, half + 1, dtype=float)
+    k = np.exp(-0.5 * (x / float(sigma)) ** 2)
+    k /= np.sum(k)
+
+    mask = np.isfinite(y).astype(float)          # 1 where valid, 0 where NaN
+    y0 = np.where(np.isfinite(y), y, 0.0)        # NaN -> 0 for convolution
+
+    # convolve numerator and denominator, then normalize
+    num = np.convolve(y0, k, mode="same")
+    den = np.convolve(mask, k, mode="same")
+
+    out = np.full_like(y0, np.nan, dtype=float)
+    ok = den > 1e-12
+    out[ok] = num[ok] / den[ok]
+    return out
 
 
 def plot_multi_curves(rounds, curves, ylabel, title, out_path):
@@ -159,7 +191,7 @@ def plot_multi_curves(rounds, curves, ylabel, title, out_path):
     ax.set_ylabel(ylabel, font1)
     ax.set_title(title, font2)
 
-    ax.legend(loc="lower right", prop=font_legend, frameon=True, framealpha=0.9)
+    ax.legend(loc="upper left", prop=font_legend, frameon=True, framealpha=0.75)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
@@ -196,7 +228,12 @@ def main():
                     help="Plot ASR curve (auto True for backdoor attacks). Use --no-plot_asr to disable.")
     ap.add_argument("--asr_key", default=None,
                     help="Force ASR key (recommended for paper: asr_full). If None, auto-pick.")
+    ap.add_argument("--smooth_sigma", type=float, default=0.0,
+                help="Gaussian smoothing sigma. 0 disables smoothing.")
+    ap.add_argument("--smooth_window", type=int, default=0,
+                help="Gaussian kernel window size (odd). 0 disables smoothing.")
 
+    
     args = ap.parse_args()
 
     if args.plot_asr is None:
@@ -251,7 +288,12 @@ def main():
     # ---- align by union rounds ----
     rounds = build_union_rounds(acc_series)
     acc_aligned = align_on_union_rounds(rounds, acc_series)
-    curves_acc = [(pretty_defense(k), acc_aligned[k]) for k in acc_aligned.keys()]
+    curves_acc = []
+    for k in acc_aligned.keys():
+        y = acc_aligned[k]
+        y = gaussian_smooth_nan(y, args.smooth_sigma, args.smooth_window)
+        curves_acc.append((pretty_defense(k), y))
+
 
     plot_multi_curves(
         rounds, curves_acc,
@@ -268,7 +310,12 @@ def main():
 
         rounds2 = build_union_rounds(asr_series)
         asr_aligned = align_on_union_rounds(rounds2, asr_series)
-        curves_asr = [(pretty_defense(k), asr_aligned[k]) for k in asr_aligned.keys()]
+        curves_asr = []
+        for k in asr_aligned.keys():
+            y = asr_aligned[k]
+            y = gaussian_smooth_nan(y, args.smooth_sigma, args.smooth_window)
+            curves_asr.append((pretty_defense(k), y))
+
 
         use_key = args.asr_key or chosen_asr_key or "asr"
         plot_multi_curves(

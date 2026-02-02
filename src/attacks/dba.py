@@ -11,6 +11,7 @@ class DBA_Attack(BaseAttack):
         super().__init__(config)
 
         trigger_config = config.get('trigger_config', {})
+        self.trigger_config = trigger_config
         dataset = config.get('dataset', 'cifar10')
         self.trigger_generator = TriggerGenerator(trigger_config, dataset)
 

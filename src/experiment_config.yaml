@@ -76,7 +76,7 @@ federated_learning:
   # 训练轮数
   total_rounds:
     mnist: 300
-    cifar10: 250
+    cifar10: 300
     cifar100: 600
     coco: 800
     tinyimagenet: 500
@@ -130,14 +130,13 @@ federated_learning:
 dba_attack:
   trigger:
     num_sub_triggers: 4
-    sub_trigger_size: 3
     trigger_strength: 5.0
 
 lga_attack:
   alignment_frequency: 1        # 每隔多少 step 做一次对齐；1=每步都对齐（最隐蔽）
   layer_wise_alignment: true    # 必须 true，按层对齐（LGA 核心）
-  min_scale_factor: 0.1         # 你给定的下界
-  max_scale_factor: 1.0         # 你给定的上界
+  min_scale_factor: 0.5        # 你给定的下界
+  max_scale_factor: 2.0         # 你给定的上界
 
 
 # RAIA防御配置
@@ -216,41 +215,40 @@ defenses:
   #   clip_coef: 2.5
   #   gamma_w: 2.0
   FedTAP:
-    beta_ref: 0.90
-    beta_theta: 0.90
+    beta_ref: 0.98
+    beta_theta: 0.97
+
     w_cos: 1.0
     w_sign: 1.0
-    w_contrib: 1.0
+    w_contrib: 2.0          # 修正符号后，contrib 应该更关键
 
     important_ratio: 0.10
-    max_val_batches: 10
+    max_val_batches: 20
 
-    # 关键：减少 strict 后严重“学不动”的风险（你的数据里 clip_bound 掉得太狠）
-    clip_coef: 3.0          # 2.5 -> 3.0（提升整体学习信号上限）
+    clip_coef: 3.0
     gamma_w: 2.0
     isolate_th: 0.05
     temp: 1.0
 
     enable_convergence_guard: true
-    conv_warmup_rounds: 45
-    conv_patience: 3
+    conv_warmup_rounds: 35
+    conv_patience: 2
     conv_ema_beta: 0.95
-    conv_loss_rel_delta_th: 0.012
-    conv_norm_frac: 0.007
+    conv_loss_rel_delta_th: 0.015
+    conv_norm_frac: 0.010
 
-    # strict：核心改这里
-    strict_temp_mul: 0.75      # 0.60 -> 0.75（别把权重分布“拉太尖”，降低误伤）
-    strict_gamma_mul: 2.20     # 2.00 -> 2.20（把压制更多交给“信任加权”，而不是“砍掉一半人”）
-    strict_isolate_th: 0.12    # 0.15 -> 0.12（降低误隔离 benign）
-    strict_clip_mul: 0.85      # 0.75 -> 0.85（别裁得过死，恢复 ACC 上限）
+    strict_keep_ratio: 1.0
+    strict_hard_drop: true
+    strict_down_weight: 0.0
 
-    strict_z_drop: 2.4         # 2.2 -> 2.4（减少极端误杀）
-    strict_theta_floor: 0.18   # 0.22 -> 0.18（降低“门槛式误伤”）
-    strict_cred_floor: 0.24    # 0.28 -> 0.24
+    strict_clip_mul: 0.85     # 不要太死，保 ACC
+    strict_temp_mul: 0.55     # 拉开 cred 差距
+    strict_gamma_mul: 2.2     # 更信高 cred，但不过度塌缩
 
-    strict_keep_ratio: 0.75    # 0.5 -> 0.75（你现在最伤 ACC 的点之一）
-    strict_hard_drop: false    # true -> false（用软压制替代硬删除）
-    strict_down_weight: 0.03   # 0.01 -> 0.03（给被误判 benign 留一点贡献，ACC 会明显回升）
+    strict_z_drop: 2.4        # 放松一点，减少误杀
+    strict_theta_floor: 0.12  # 放松：避免 theta EMA 波动误伤 benign
+    strict_cred_floor: 0.32   # 主要靠 cred_floor 命中恶意
+    strict_isolate_th: 0.07   # 关键：别让大量 benign 直接投影
 
 
 

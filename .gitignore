@@ -24,3 +24,7 @@ Thumbs.db
 # experiment outputs
 runs*/
 plots*/
+mnist/
+
+# datasets
+src/data/*
