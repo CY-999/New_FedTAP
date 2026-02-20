@@ -27,6 +27,59 @@ from src.utils import setup_logging, save_checkpoint, load_checkpoint
 from src.utils.bn_calibration import bn_recalibrate, create_bn_mask, apply_bn_mask
 from src.evaluation import Evaluator
 
+
+def _pick_fedtap_params(def_cfg: dict, attack_mode: str, exp_defense_config: dict) -> dict:
+    """
+    从 defenses.FedTAP 里根据 attack_mode 选 base/strict profile，并与 experiment 的 defense_config 合并。
+    兼容旧写法：如果没有 profiles，就直接 merge(def_cfg, exp_defense_config)。
+    """
+    def_cfg = def_cfg or {}
+    exp_defense_config = exp_defense_config or {}
+
+    profiles = def_cfg.get("profiles", {}) or {}
+    if not profiles:
+        merged = {**def_cfg, **exp_defense_config}
+        # 清理可能出现的 meta 字段
+        merged.pop("profiles", None)
+        merged.pop("profile", None)
+        merged.pop("byzantine_attacks", None)
+        merged.pop("backdoor_attacks", None)
+        return merged
+
+    profile = str(def_cfg.get("profile", "auto")).lower()
+    attack_lower = str(attack_mode or "").lower()
+
+    byz = set(str(x).lower() for x in def_cfg.get("byzantine_attacks", []) or [])
+    bd  = set(str(x).lower() for x in def_cfg.get("backdoor_attacks", []) or [])
+
+    # auto：按攻击类型选档
+    if profile == "auto":
+        if attack_lower in bd:
+            chosen = "strict"
+        elif attack_lower in byz:
+            chosen = "base"
+        else:
+            chosen = "base"  # 未知攻击：默认 base 更稳
+    else:
+        chosen = profile if profile in profiles else "base"
+
+    chosen_cfg = copy.deepcopy(profiles.get(chosen, {}))
+    chosen_cfg.setdefault("profile_name", f"auto_{chosen}")
+
+    merged = {**chosen_cfg, **exp_defense_config}
+
+    # auto 模式下兜底强制：避免 defense_config 把开关反改回去
+    if profile == "auto":
+        if attack_lower in bd:
+            merged["enable_convergence_guard"] = True
+            merged["profile_name"] = "backdoor_strict"
+        elif attack_lower in byz:
+            merged["enable_convergence_guard"] = False
+            merged["profile_name"] = "byzantine_base"
+
+    return merged
+
+
 class ExperimentRunner:
 
     def __init__(self, config_path: str, output_dir: str = None, experiment_config: Dict[str, Any] = None):
@@ -321,10 +374,28 @@ class ExperimentRunner:
             return create_defense('SAGEHistory', merged_config)
        
         elif defense_name == 'FedTAP' or defense_lower == 'fedtap':
-            return create_defense('FedTAP', self.config.get('defenses', {}).get('FedTAP', {}))
+            defenses_cfg = self.config.get('defenses', {}) or {}
+            fedtap_def_cfg = defenses_cfg.get('FedTAP', {}) or {}
+
+            attack_mode = str(config.get('attack_mode', ''))
+            merged_cfg = _pick_fedtap_params(fedtap_def_cfg, attack_mode, exp_defense_config)
+
+            self.logger.info(
+                "[FedTAP] attack=%s profile=%s enable_convergence_guard=%s",
+                attack_mode,
+                merged_cfg.get("profile_name", None),
+                merged_cfg.get("enable_convergence_guard", None),
+            )
+            return create_defense('FedTAP', merged_cfg)
+        elif defense_name == 'FLAME' or defense_lower == 'flame':
+            return create_defense('FLAME', self.config.get('defenses', {}).get('FLAME', {}))
         else:
             defense_config = self.config.get('defenses', {}).get(defense_name, {})
-            return create_defense(defense_name, defense_config)
+            if defense_config is None:
+                defense_config = {}
+            merged_config = {**defense_config, **exp_defense_config}
+            # 未知 defense：明确报错，避免静默走 FedAvg
+            raise ValueError(f"Unknown defense: {defense_name}. Check config/experiment JSON.")
 
     def _create_attack(self, config: Dict[str, Any]):
 

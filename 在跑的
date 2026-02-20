@@ -1,18 +1,6 @@
-alie 1
-Tail 1
-lga 3
-ipm 1
 
-dba 1
-tail 1
-ipm 1
-lga 3
-
-
-minmax label_flip alie 
-fedtap
-
-lga
-trimmedmean
-
+fedtap 
+    tail 
+    dba 1
+    lga
 

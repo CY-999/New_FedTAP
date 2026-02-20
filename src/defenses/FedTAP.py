@@ -45,6 +45,9 @@ class FedTAP(BaseDefense):
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
         cfg = config or {}
+        
+        # 用于日志/结果确认当前参数档位（例如：byzantine_base / backdoor_strict）
+        self.profile_name = str(cfg.get("profile_name", "FedTAP"))
 
         # ---- Temporal reference direction ----
         self.beta_ref = float(cfg.get("beta_ref", 0.90))  # EMA for reference direction
@@ -104,6 +107,7 @@ class FedTAP(BaseDefense):
         self.strict_keep_ratio = float(cfg.get("strict_keep_ratio", 0.85))  # keep top-k by credibility
         self.strict_hard_drop = bool(cfg.get("strict_hard_drop", False))
         self.strict_down_weight = float(cfg.get("strict_down_weight", 0.03))
+        self.strict_theta_cap = float(cfg.get("strict_theta_cap", 0.70))
 
         # internal trust table: client_id -> theta
         self._theta: Dict[int, float] = {}
@@ -502,7 +506,7 @@ class FedTAP(BaseDefense):
 
             th = float(theta_t[i].item())
             if strict:
-                th = min(th, 0.70)   # theta_cap：建议 0.65~0.75
+                th = min(th, self.strict_theta_cap)
 
             if bool(isolated[i].item()):
                 u_clean = proj
@@ -574,7 +578,10 @@ class FedTAP(BaseDefense):
             "round": int(round_idx),
             "num_clients": int(m),
             "client_ids_provided": bool(client_ids_provided),
-
+            
+            "profile": str(self.profile_name),
+            "enable_convergence_guard": bool(self.enable_convergence_guard),
+            
             "strict": bool(strict),
             "strict_next": bool(strict_next),
             "entered_strict": bool(entered),
