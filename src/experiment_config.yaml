@@ -61,7 +61,7 @@ datasets:
 # 联邦学习配置
 federated_learning:
   num_clients: 100
-  clients_per_round: 30  # 修改为50，使sketch_dim=8更合理
+  clients_per_round: 50  # 修改为50，使sketch_dim=8更合理
   
   # 数据分布
   data_distribution:
@@ -205,65 +205,85 @@ defenses:
     
 # FedTAP配置
   FedTAP:
-    profile: auto
-    byzantine_attacks: [untargeted_label_flip, pure_ipm, pure_minmax, alie, label_flip]
-    backdoor_attacks:  [a_m, a_s, attack_of_the_tails, semantic_attack, lga]
+  profile: auto
+  byzantine_attacks: [untargeted_label_flip, pure_ipm, pure_minmax, alie, label_flip]
+  backdoor_attacks:  [a_m, a_s, attack_of_the_tails, semantic_attack, lga]
 
-    profiles:
-      base:
-        profile_name: "byzantine_base"
-        enable_convergence_guard: false
-        beta_ref: 0.90
-        beta_theta: 0.90
-        w_cos: 1.0
-        w_sign: 1.0
-        w_contrib: 1.0
-        important_ratio: 0.10
-        max_val_batches: 3
-        clip_coef: 2.5
-        gamma_w: 2.0
-        isolate_th: 0.05
-        temp: 1.0
-        use_contrib: true
+  profiles:
+    base:
+      profile_name: "byzantine_base"
+      enable_convergence_guard: false
 
-      strict:
-        profile_name: "backdoor_strict"
-        enable_convergence_guard: true
-        # 你的 strict 参数整套放这里（包含 conv_* 与 strict_*）
-        beta_ref: 0.98
-        beta_theta: 0.97
+      beta_ref: 0.90
+      beta_theta: 0.90
 
-        w_cos: 1.0
-        w_sign: 1.0
-        w_contrib: 2.0          # 修正符号后，contrib 应该更关键
+      w_cos: 1.0
+      w_sign: 1.0
+      w_contrib: 1.0
 
-        important_ratio: 0.10
-        max_val_batches: 20
+      important_ratio: 0.10
+      max_val_batches: 3
+      clip_coef: 2.5
+      isolate_th: 0.05
+      use_contrib: true
 
-        clip_coef: 3.0
-        gamma_w: 2.0
-        isolate_th: 0.05
-        temp: 1.0
+     
+      lambda_w: 1.4            # base 不要太尖，保泛化
+      kappa_scale: 1.0
+      kappa_min: 0.15
+      kappa_max: 3.0
+      tau_beta: 0.90
+      tau_offset: 0.00
 
-        enable_convergence_guard: true
-        conv_warmup_rounds: 35
-        conv_patience: 2
-        conv_ema_beta: 0.95
-        conv_loss_rel_delta_th: 0.015
-        conv_norm_frac: 0.010
+    strict:
+      profile_name: "backdoor_strict"
+      enable_convergence_guard: true
 
-        strict_keep_ratio: 1.0
-        strict_hard_drop: true
-        strict_down_weight: 0.0
+      beta_ref: 0.98
+      beta_theta: 0.97
 
-        strict_clip_mul: 0.85     # 不要太死，保 ACC
-        strict_temp_mul: 0.55     # 拉开 cred 差距
-        strict_gamma_mul: 2.2     # 更信高 cred，但不过度塌缩
+      w_cos: 1.0
+      w_sign: 1.0
+      w_contrib: 2.0
 
-        strict_z_drop: 2.4        # 放松一点，减少误杀
-        strict_theta_floor: 0.12  # 放松：避免 theta EMA 波动误伤 benign
-        strict_cred_floor: 0.32   # 主要靠 cred_floor 命中恶意
-        strict_isolate_th: 0.07   # 关键：别让大量 benign 直接投影
+      important_ratio: 0.10
+      max_val_batches: 20
+
+      clip_coef: 3.0
+      isolate_th: 0.05
+      use_contrib: true
+
+      
+      lambda_w: 1.6            # 控制指数权重集中度
+      strict_lambda_mul: 1.7   # strict λ_eff≈2.72（比你当前 4.4 温和很多）
+
+      kappa_scale: 1.0
+      kappa_min: 0.25          # 关键：避免后期 MAD 小导致 κ_eff 极小
+      kappa_max: 3.0
+      tau_beta: 0.95           # τ 更平滑，减少轮间 jitter
+      tau_offset: 0.05         # 轻微宽松，降低误杀 benign 概率（可 0.00~0.08 微调）
+
+      # convergence guard（让 strict 更“晚且稳”）
+      conv_warmup_rounds: 160  # 你当前是 120，偏早；提高能明显缓解 ACC 被压 :contentReference[oaicite:10]{index=10}
+      conv_patience: 3
+      conv_ema_beta: 0.95
+      conv_loss_rel_delta_th: 0.012
+      conv_norm_frac: 0.010
+
+      # strict behavior
+      strict_keep_ratio: 1.0
+
+      strict_hard_drop: false  # 由硬删除改为软降权，最保 ACC
+      strict_down_weight: 0.02
+
+      strict_clip_mul: 0.90    # 你当前 0.85 更紧；放松一点保学习速度
+      strict_temp_mul: 0.70    # 你当前 0.55 会让 κ_eff 更小、更硬；上调保 ACC
+
+      strict_z_drop: 2.4
+      strict_theta_floor: 0.12
+      strict_cred_floor: 0.25  # 你当前 0.32 在新 τ/κ 下更容易误杀 benign
+      strict_isolate_th: 0.06  # 避免 benign 大量直接投影
+      strict_theta_cap: 0.85   # 默认 0.70 偏保守；上调保 ACC
 
         
 

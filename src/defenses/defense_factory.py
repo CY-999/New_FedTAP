@@ -4,7 +4,7 @@ from .baselines import (
     BaseDefense, FedAvg, FedBN, FedProx, CoordinateMedian,
     TrimmedMean, GeoMedian, FLTrust, FoolsGold, NoisyAggregation, RFA, FLShield, FLAME
 )
-from .FedTAP import FedTAP
+from .__FedTAP import FedTAP
 # from .raiastat import create_raia_plus
 # from .raia import create_raia_mvp
 # from .sage import create_sage

@@ -37,24 +37,30 @@ def _safe_float(x: Any, default: float = 0.0) -> float:
 
 class FedTAP(BaseDefense):
     """
-    Efficient temporal robust aggregator with alignment + contribution + self-purify,
-    enhanced by server-side convergence guard (val loss plateau + aggregated-update-norm plateau)
-    to trigger stricter filtering in late training (esp. against backdoors).
+    Efficient temporal robust aggregator with alignment + sign + contribution + self-purify,
+    enhanced by server-side convergence guard to trigger stricter filtering in late training.
+
+    Updates in this version (per user's request):
+      (1) Trust-aware aggregation uses exponential sharpening:
+          w_i ∝ exp(-λ (1 - θ_i)) = exp(λ (θ_i - 1))
+      (2) Credibility mapping uses logistic with τ_t and κ_t:
+          c_{t,i} = σ((τ_t - z_{t,i}) / κ_t),
+          where κ_t is MAD-adaptive, and τ_t is EMA-smoothed.
     """
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
         cfg = config or {}
-        
-        # 用于日志/结果确认当前参数档位（例如：byzantine_base / backdoor_strict）
+
+        # For logging / result identification
         self.profile_name = str(cfg.get("profile_name", "FedTAP"))
 
         # ---- Temporal reference direction ----
-        self.beta_ref = float(cfg.get("beta_ref", 0.90))  # EMA for reference direction
+        self.beta_ref = float(cfg.get("beta_ref", 0.90))
         self._ref_dir: Optional[torch.Tensor] = None
 
         # ---- Trust propagation ----
-        self.beta_theta = float(cfg.get("beta_theta", 0.90))   # EMA for per-client trust
+        self.beta_theta = float(cfg.get("beta_theta", 0.90))
         self.init_trust = float(cfg.get("init_trust", 1.0))
         self.hysteresis_th = float(cfg.get("hysteresis_th", 0.30))
         self.hysteresis_up_factor = float(cfg.get("hysteresis_up_factor", 0.25))
@@ -64,47 +70,59 @@ class FedTAP(BaseDefense):
         self.w_sign = float(cfg.get("w_sign", 1.0))
         self.w_contrib = float(cfg.get("w_contrib", 1.0))
         self.z_clip = float(cfg.get("z_clip", 6.0))
-        self.temp = float(cfg.get("temp", 1.0))  # sigmoid temperature
+
+        # ---- Logistic credibility (τ_t, κ_t) ----
+        # Backward-compat: old "temp" is treated as a scale for κ_t if "kappa_scale" not provided.
+        self.kappa_scale = float(cfg.get("kappa_scale", cfg.get("temp", 1.0)))
+        self.kappa_min = float(cfg.get("kappa_min", 1e-4))
+        self.kappa_max = float(cfg.get("kappa_max", 10.0))
+
+        # τ_t smoothing
+        self.tau_beta = float(cfg.get("tau_beta", 0.90))          # EMA smoothing for τ_t
+        self.tau_offset = float(cfg.get("tau_offset", 0.0))       # optional shift: τ_target = median(z)+offset
+        tau_init = cfg.get("tau_init", None)
+        self._tau_t: Optional[float] = float(tau_init) if tau_init is not None else None
 
         # ---- Important parameter subset for sign alignment ----
-        self.important_ratio = float(cfg.get("important_ratio", 0.10))  # top 10%
-        self.max_important = int(cfg.get("max_important", 200_000))      # hard cap
-        self.min_important = int(cfg.get("min_important", 20_000))       # floor
+        self.important_ratio = float(cfg.get("important_ratio", 0.10))
+        self.max_important = int(cfg.get("max_important", 200_000))
+        self.min_important = int(cfg.get("min_important", 20_000))
 
         # ---- Self-purify + aggregation ----
-        self.gamma_w = float(cfg.get("gamma_w", 2.0))  # trust -> weight sharpening
-        self.isolate_th = float(cfg.get("isolate_th", 0.05))  # extremely low trust
-        self.clip_coef = float(cfg.get("clip_coef", 2.5))     # median-norm clipping
+        self.isolate_th = float(cfg.get("isolate_th", 0.05))
+        self.clip_coef = float(cfg.get("clip_coef", 2.5))
+
+        # Trust weight sharpening (exponential): w ∝ exp(-λ(1-θ))
+        # Backward-compat: if "lambda_w" not provided, fall back to old "gamma_w".
+        self.lambda_w = float(cfg.get("lambda_w", cfg.get("gamma_w", 2.0)))
 
         # ---- Contribution (validation gradient direction) ----
         self.use_contrib = bool(cfg.get("use_contrib", True))
-        self.max_val_batches = int(cfg.get("max_val_batches", 3))  # small => fast
+        self.max_val_batches = int(cfg.get("max_val_batches", 3))
 
-        # ========== NEW: Convergence Guard (val loss plateau + update norm) ==========
+        # ========== Convergence Guard (val loss plateau + update norm) ==========
         self.enable_convergence_guard = bool(cfg.get("enable_convergence_guard", True))
         self.conv_warmup_rounds = int(cfg.get("conv_warmup_rounds", 30))
         self.conv_patience = int(cfg.get("conv_patience", 5))
         self.conv_ema_beta = float(cfg.get("conv_ema_beta", 0.90))
-        # loss plateau: relative EMA delta threshold
         self.conv_loss_rel_delta_th = float(cfg.get("conv_loss_rel_delta_th", 0.005))
-        # update plateau: relative change of agg_norm EMA (|ema_t-ema_{t-1}|/|ema_{t-1}|)
-        # NOTE: conv_norm_frac is a threshold on agg_norm_rel_delta (not decay-to-max fraction).
+        # threshold on agg_norm_rel_delta
         self.conv_norm_frac = float(cfg.get("conv_norm_frac", 0.55))
 
-        # ========== NEW: Strict filtering once stable ==========
-        # sharpen credibility mapping
-        self.strict_temp_mul = float(cfg.get("strict_temp_mul", 0.60))      # temp_eff = temp * mul
-        # trust weight sharpening
-        self.strict_gamma_mul = float(cfg.get("strict_gamma_mul", 1.70))    # gamma_eff = gamma * mul
-        # stricter isolation threshold (projection-only)
-        self.strict_isolate_th = float(cfg.get("strict_isolate_th", 0.12))  # isolate_th_eff = max(isolate_th, strict)
-        # tighter clipping
-        self.strict_clip_mul = float(cfg.get("strict_clip_mul", 0.80))      # clip_coef_eff = clip_coef * mul
-        # strict suspicious rules
+        # ========== Strict filtering once stable ==========
+        # Logistic sharpening: strict_temp_mul now acts as κ multiplier (<1 => sharper sigmoid)
+        self.strict_temp_mul = float(cfg.get("strict_temp_mul", 0.60))
+
+        # Exponential trust-weight sharpening multiplier (compat: fall back to strict_gamma_mul)
+        self.strict_lambda_mul = float(cfg.get("strict_lambda_mul", cfg.get("strict_gamma_mul", 1.70)))
+
+        self.strict_isolate_th = float(cfg.get("strict_isolate_th", 0.12))
+        self.strict_clip_mul = float(cfg.get("strict_clip_mul", 0.80))
+
         self.strict_z_drop = float(cfg.get("strict_z_drop", 2.2))
         self.strict_theta_floor = float(cfg.get("strict_theta_floor", 0.22))
         self.strict_cred_floor = float(cfg.get("strict_cred_floor", 0.28))
-        self.strict_keep_ratio = float(cfg.get("strict_keep_ratio", 0.85))  # keep top-k by credibility
+        self.strict_keep_ratio = float(cfg.get("strict_keep_ratio", 0.85))
         self.strict_hard_drop = bool(cfg.get("strict_hard_drop", False))
         self.strict_down_weight = float(cfg.get("strict_down_weight", 0.03))
         self.strict_theta_cap = float(cfg.get("strict_theta_cap", 0.70))
@@ -119,13 +137,8 @@ class FedTAP(BaseDefense):
         self.in_stable_phase = False
         self.stable_start_round: Optional[int] = None
         self._stable_count = 0
-        self._post_warmup_norm_inited = False
         self._agg_norm_ema: Optional[float] = None
-        self._agg_norm_ema_prev: Optional[float] = None
-        self._last_agg_norm: Optional[float] = None
-
         self._loss_ema: Optional[float] = None
-        self._loss_ema_prev: Optional[float] = None
 
         # cache val grad direction (optional)
         self._cached_val_grad: Optional[torch.Tensor] = None
@@ -199,7 +212,7 @@ class FedTAP(BaseDefense):
     ) -> Optional[torch.Tensor]:
         """
         One normalized validation gradient direction (flattened).
-        (Used only when use_contrib=True.)
+        Returns (-grad) / ||grad||, i.e., a descent direction on the validation loss.
         """
         if model is None or val_loader is None:
             return None
@@ -267,9 +280,6 @@ class FedTAP(BaseDefense):
         Signals:
         - loss_rel_delta: relative change of loss EMA
         - agg_norm_rel_delta: relative change of aggregated-update-norm EMA
-
-        Use plateau (relative EMA change) instead of absolute decay:
-        under multi-round attacks, update magnitudes may not monotonically shrink.
         """
         info: Dict[str, Any] = {
             "candidate": False,
@@ -281,6 +291,7 @@ class FedTAP(BaseDefense):
             "agg_norm": _safe_float(agg_norm, default=float("nan")),
             "agg_norm_ema": float("nan"),
             "agg_norm_rel_delta": float("nan"),
+            "agg_norm_frac": float("nan"),
         }
 
         if not self.enable_convergence_guard:
@@ -292,11 +303,9 @@ class FedTAP(BaseDefense):
         if val_loss is not None and math.isfinite(float(val_loss)):
             if self._loss_ema is None:
                 self._loss_ema = float(val_loss)
-                self._loss_ema_prev = float(val_loss)
                 loss_rel_delta = 0.0
             else:
                 prev = float(self._loss_ema)
-                self._loss_ema_prev = prev
                 self._loss_ema = beta * prev + (1.0 - beta) * float(val_loss)
                 loss_rel_delta = abs(self._loss_ema - prev) / max(abs(prev), eps)
 
@@ -307,11 +316,9 @@ class FedTAP(BaseDefense):
         if agg_norm is not None and math.isfinite(float(agg_norm)):
             if self._agg_norm_ema is None:
                 self._agg_norm_ema = float(agg_norm)
-                self._agg_norm_ema_prev = float(agg_norm)
                 agg_rel_delta = 0.0
             else:
                 prev = float(self._agg_norm_ema)
-                self._agg_norm_ema_prev = prev
                 self._agg_norm_ema = beta * prev + (1.0 - beta) * float(agg_norm)
                 agg_rel_delta = abs(self._agg_norm_ema - prev) / max(abs(prev), eps)
 
@@ -329,7 +336,6 @@ class FedTAP(BaseDefense):
 
         loss_plateau_ok = (info["loss_rel_delta"] <= float(self.conv_loss_rel_delta_th))
         norm_plateau_ok = (info["agg_norm_rel_delta"] <= float(self.conv_norm_frac))
-
         candidate = bool(loss_plateau_ok and norm_plateau_ok)
         info["candidate"] = candidate
 
@@ -346,7 +352,15 @@ class FedTAP(BaseDefense):
 
         return info
 
-
+    @staticmethod
+    def _mad(x: torch.Tensor, eps: float = 1e-12) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns (median, MAD) for a 1D tensor x.
+        MAD = median(|x - median(x)|)
+        """
+        med = x.median()
+        mad = (x - med).abs().median()
+        return med, mad + eps
 
     def aggregate(
         self,
@@ -395,7 +409,6 @@ class FedTAP(BaseDefense):
         imp_idx = self._build_important_idx(ref_dir)
 
         # ---- server-side convergence signals ----
-        # 1) server val loss (small set)
         val_loss = None
         if self.enable_convergence_guard and (val_loader is not None) and (global_model_obj is not None):
             val_loss = self._compute_val_loss(global_model_obj, val_loader, dev, max_batches=self.max_val_batches)
@@ -403,9 +416,7 @@ class FedTAP(BaseDefense):
         # IMPORTANT: strict used for THIS round is determined by previous rounds only
         strict = bool(self.in_stable_phase)
 
-        # strict effective params
-        temp_eff = self.temp * (self.strict_temp_mul if strict else 1.0)
-        gamma_eff = self.gamma_w * (self.strict_gamma_mul if strict else 1.0)
+        # strict effective params (other logic unchanged)
         isolate_th_eff = max(self.isolate_th, self.strict_isolate_th) if strict else self.isolate_th
         clip_coef_eff = self.clip_coef * (self.strict_clip_mul if strict else 1.0)
 
@@ -447,7 +458,7 @@ class FedTAP(BaseDefense):
 
             if g_val is not None and g_val.numel() == uf.numel():
                 cos_g = torch.dot(g_val.to(torch.float32), uf) / (uf.norm() + eps)  # [-1, 1]
-                contrib_d[i] = 1.0 - cos_g  # 距离：越大越异常
+                contrib_d[i] = 1.0 - cos_g  # larger => more suspicious
             else:
                 contrib_d[i] = 0.0
 
@@ -456,18 +467,36 @@ class FedTAP(BaseDefense):
         z_sign = _robust_z(sign_d, eps=eps)
         z_contrib = _robust_z(contrib_d, eps=eps) if (g_val is not None) else torch.zeros_like(z_cos)
 
-        z = self.w_cos * z_cos + self.w_sign * z_sign + self.w_contrib * z_contrib
-        z = torch.clamp(z, -self.z_clip, self.z_clip)
+        z_raw = self.w_cos * z_cos + self.w_sign * z_sign + self.w_contrib * z_contrib
+        z = torch.clamp(z_raw, -self.z_clip, self.z_clip)
 
-        # credibility higher is better (strict => sharper)
-        c_round = _sigmoid((-z) / max(temp_eff, 1e-6))
+        # ---- NEW: logistic credibility with τ_t and κ_t (MAD-adaptive), τ_t EMA-smoothed ----
+        # κ_t from MAD(z): kappa = kappa_scale * (1.4826 * MAD + eps)
+        med_z, mad_z = self._mad(z, eps=eps)
+        kappa_t = self.kappa_scale * (1.4826 * mad_z)
+        kappa_t = torch.clamp(kappa_t, min=self.kappa_min, max=self.kappa_max)
+
+        # τ_t target = median(z) + offset, then EMA smooth
+        tau_target = float(med_z.item()) + float(self.tau_offset)
+        if self._tau_t is None or (not math.isfinite(float(self._tau_t))):
+            self._tau_t = float(tau_target)
+        else:
+            self._tau_t = float(self.tau_beta * float(self._tau_t) + (1.0 - self.tau_beta) * float(tau_target))
+
+        # strict => sharper sigmoid by shrinking κ
+        kappa_eff = float(kappa_t.item()) * (self.strict_temp_mul if strict else 1.0)
+        kappa_eff = max(kappa_eff, 1e-6)
+
+        # credibility higher is better
+        c_round = _sigmoid((float(self._tau_t) - z) / kappa_eff)
 
         # ---- update temporal trust (theta) ----
-        theta_list = []
+        theta_list: List[float] = []
         for i, cid in enumerate(client_ids):
             theta_old = self._get_theta(cid)
             theta_new = self.beta_theta * theta_old + (1.0 - self.beta_theta) * float(c_round[i].item())
 
+            # hysteresis: slow recovery for low-trust clients
             if theta_old < self.hysteresis_th and theta_new > theta_old:
                 theta_new = theta_old + self.hysteresis_up_factor * (theta_new - theta_old)
 
@@ -532,24 +561,28 @@ class FedTAP(BaseDefense):
             else:
                 clipped.append(p)
 
-        # ---- trust weights (strict => sharper gamma) ----
-        w = torch.pow(theta_t.clamp_min(0.0), gamma_eff)
-        w = w + 1e-6
-        # strict downweight / hard drop suspicious (restore)
+        # ---- NEW: exponential trust weights (strict => larger λ) ----
+        theta01 = theta_t.clamp(0.0, 1.0)
+        lambda_eff = float(self.lambda_w) * (self.strict_lambda_mul if strict else 1.0)
+
+        # w_i ∝ exp(-λ(1-θ_i)) = exp(λ(θ_i - 1))
+        w = torch.exp(lambda_eff * (theta01 - 1.0)) + 1e-6
+
+        # strict downweight / hard drop suspicious
         if strict and suspicious.any():
             if self.strict_hard_drop:
                 w = torch.where(suspicious, torch.zeros_like(w), w)
             else:
                 w = torch.where(suspicious, w * self.strict_down_weight, w)
-        # strict downweight / hard drop suspicious
-        w_sum = float(w.sum().item())
-        if w_sum <= 1e-12:
+
+        # guard against all-zero
+        if float(w.sum().item()) <= 1e-12:
             if strict and suspicious.any() and (~suspicious).any():
-                w = (~suspicious).to(w.dtype)  # uniform over non-suspicious only
+                w = (~suspicious).to(w.dtype)
             else:
                 w = torch.ones_like(w)
-        w = w / (w.sum() + 1e-12)
 
+        w = w / (w.sum() + 1e-12)
 
         # ---- final aggregation ----
         agg = torch.zeros_like(proc_updates[0])
@@ -573,15 +606,16 @@ class FedTAP(BaseDefense):
         # ---- minimal decisive stats for analysis/logging ----
         suspicious_ratio = float(suspicious.to(torch.float32).mean().item())
         theta_min = float(theta_t.min().item())
+
         stats: Dict[str, Any] = {
             "method": "FedTAP",
             "round": int(round_idx),
             "num_clients": int(m),
             "client_ids_provided": bool(client_ids_provided),
-            
+
             "profile": str(self.profile_name),
             "enable_convergence_guard": bool(self.enable_convergence_guard),
-            
+
             "strict": bool(strict),
             "strict_next": bool(strict_next),
             "entered_strict": bool(entered),
@@ -598,10 +632,15 @@ class FedTAP(BaseDefense):
             "theta_min": float(theta_min),
             "clip_bound": float(clip_bound),
 
+            # NEW: logistic & exponential-sharpening diagnostics
+            "tau_t": _safe_float(self._tau_t, default=float("nan")),
+            "kappa_t": float(kappa_t.item()) if isinstance(kappa_t, torch.Tensor) else _safe_float(kappa_t, default=float("nan")),
+            "kappa_eff": float(kappa_eff),
+            "lambda_eff": float(lambda_eff),
+
             # keep legacy key if your plotting expects it
             "agg_l2": float(agg_l2),
         }
 
         self.last_info = stats
         return agg, stats
-
