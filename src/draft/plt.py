@@ -5,26 +5,41 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 
-# ================= Style (same as your reference) =================
+# ===== Fig.1-like poster style =====
 font_family = "DejaVu Sans"
-font1 = {"family": font_family, "weight": "normal", "size": 80}
-font2 = {"family": font_family, "weight": "normal", "size": 65}
-font_legend = {"family": font_family, "weight": "normal", "size": 30}
-Label_Size = 50
 
-bwith = 1.7
-lwidth = 5
-msize = 10
-marker_alpha = 0.85
+# 轴标题（大 + 粗）
+font1 = {"family": font_family, "weight": "bold", "size": 34}  # y-label
+font2 = {"family": font_family, "weight": "bold", "size": 34}  # x-label / title
+
+# 刻度 & legend
+Label_Size = 22
+font_legend = {"family": font_family, "weight": "bold", "size": 18}
+
+# 线条/边框
+bwith = 1.8
+lwidth = 3.0
+msize = 10          # marker size base
+marker_alpha = 0.90
 
 rcParams["axes.unicode_minus"] = False
 rcParams["font.family"] = font_family
 
 # enough colors/markers for many defenses
 COLS = [
-    "darkorange", "limegreen", "c", "y", "m",
-    "tab:blue", "tab:red", "tab:purple", "tab:brown", "tab:pink",
-    "tab:gray", "tab:olive", "tab:cyan"
+    "#e41a1c",  # red
+    "#377eb8",  # blue
+    "#4daf4a",  # green
+    "#984ea3",  # purple
+    "#ff7f00",  # orange
+    "#a65628",  # brown
+    "#f781bf",  # pink
+    "#999999",  # gray
+    "#dede00",  # yellow
+    "#00bcd4",  # cyan
+    "#00c853",  # vivid green
+    "#ff4081",  # vivid magenta
+    "#651fff",  # vivid indigo
 ]
 MARKERS = ["o", "^", "s", "D", "P", "X", "v", "*", "<", ">", "h", "8", "p"]
 
@@ -35,7 +50,6 @@ def norm_dir_name(name: str) -> str:
     return str(name).lower().replace("_", "").replace(" ", "")
 
 def pretty_defense(name: str) -> str:
-    # match your defense_factory names
     mapping = {
         "fedavg": "FedAvg",
         "fedbn": "FedBN",
@@ -50,6 +64,8 @@ def pretty_defense(name: str) -> str:
         "rfa": "RFA",
         "flshield": "FLShield",
         "fedtap": "FedTAP",
+        "decare": "DeCARE",
+        "decaregeom": "DeCARE_GEOM",
     }
     key = norm_dir_name(name)
     return mapping.get(key, name)
@@ -57,7 +73,7 @@ def pretty_defense(name: str) -> str:
 
 def is_backdoor_attack(attack_name: str) -> bool:
     a = str(attack_name).lower()
-    return any(k in a for k in ["a_m", "a_s", "dba", "tail", "attack_of_the_tails", "semantic","lga"])
+    return any(k in a for k in ["a_m", "a_s", "dba", "tail", "attack_of_the_tails", "semantic", "lga"])
 
 
 # ================= Load results.json =================
@@ -89,7 +105,6 @@ def load_results(path: str, asr_key: str | None = None):
 
 
 def build_union_rounds(series_dict):
-    # series_dict: {name: (rounds, y)}
     all_rounds = set()
     for r, _ in series_dict.values():
         all_rounds |= set(map(int, r.tolist()))
@@ -97,7 +112,6 @@ def build_union_rounds(series_dict):
 
 
 def align_on_union_rounds(all_rounds, series_dict):
-    # return aligned {name: y_aligned} with NaN for missing rounds
     aligned = {}
     for name, (r, y) in series_dict.items():
         idx = {int(rr): i for i, rr in enumerate(r.tolist())}
@@ -107,6 +121,7 @@ def align_on_union_rounds(all_rounds, series_dict):
                 yy[i] = float(y[idx[int(rr)]])
         aligned[name] = yy
     return aligned
+
 
 def gaussian_smooth_nan(y: np.ndarray, sigma: float, window: int) -> np.ndarray:
     """
@@ -119,7 +134,6 @@ def gaussian_smooth_nan(y: np.ndarray, sigma: float, window: int) -> np.ndarray:
     if sigma is None or sigma <= 0 or window is None or window <= 1:
         return y
 
-    # force odd window
     if window % 2 == 0:
         window += 1
 
@@ -128,10 +142,9 @@ def gaussian_smooth_nan(y: np.ndarray, sigma: float, window: int) -> np.ndarray:
     k = np.exp(-0.5 * (x / float(sigma)) ** 2)
     k /= np.sum(k)
 
-    mask = np.isfinite(y).astype(float)          # 1 where valid, 0 where NaN
-    y0 = np.where(np.isfinite(y), y, 0.0)        # NaN -> 0 for convolution
+    mask = np.isfinite(y).astype(float)
+    y0 = np.where(np.isfinite(y), y, 0.0)
 
-    # convolve numerator and denominator, then normalize
     num = np.convolve(y0, k, mode="same")
     den = np.convolve(mask, k, mode="same")
 
@@ -141,9 +154,20 @@ def gaussian_smooth_nan(y: np.ndarray, sigma: float, window: int) -> np.ndarray:
     return out
 
 
-def plot_multi_curves(rounds, curves, ylabel, title, out_path):
-    fig = plt.figure(figsize=(20, 14))
-    ax = fig.add_subplot(111)
+def _pick_xtick_step(max_round: int) -> int:
+    # match Fig.1: roughly 0,100,200,300,400...
+    if max_round >= 400:
+        return 100
+    if max_round >= 300:
+        return 50
+    if max_round >= 150:
+        return 25
+    return 10
+
+
+def plot_multi_curves(rounds, curves, ylabel, title, out_path, legend_loc="upper left"):
+    fig = plt.figure(figsize=(10.5, 7.0))
+    ax = fig.gca()
 
     if len(rounds) == 0:
         print(f"[WARN] empty rounds: {out_path}")
@@ -152,46 +176,65 @@ def plot_multi_curves(rounds, curves, ylabel, title, out_path):
 
     max_round = int(rounds[-1])
 
-    # keep ~18 markers per curve
-    markevery = max(1, int(np.ceil(len(rounds) / 18)))
+    # --- grid like Fig.1 ---
+    ax.grid(True, linestyle="--", linewidth=1.2, alpha=0.35)
+
+    # --- markers only on key rounds (Fig.1 style) ---
+    xt_step = _pick_xtick_step(max_round)
+    key_rounds = list(range(0, max_round + 1, xt_step))
+    round_to_idx = {int(r): i for i, r in enumerate(rounds.tolist())}
+    key_idx = [round_to_idx[r] for r in key_rounds if r in round_to_idx]
 
     for i, (label, y) in enumerate(curves):
         color = COLS[i % len(COLS)]
         marker = MARKERS[i % len(MARKERS)]
+
+        # main line (NO marker on every point)
         ax.plot(
             rounds, y,
             color=color,
             linewidth=lwidth,
             linestyle="-",
-            marker=marker,
-            markersize=msize,
-            markevery=markevery,
-            alpha=marker_alpha,
+            alpha=1.0,
             label=label,
         )
 
-    ax.set_xlim(1, max_round)
+        # overlay sparse markers at key rounds only
+        if len(key_idx) > 0:
+            ax.scatter(
+                rounds[key_idx],
+                np.asarray(y)[key_idx],
+                marker=marker,
+                s=(msize * 1.3) ** 2,
+                color=color,
+                alpha=marker_alpha,
+                zorder=4,
+            )
+
+    # axis limits/ticks like Fig.1
+    ax.set_xlim(0, max_round)
     ax.set_ylim(0.0, 1.0)
 
-    if max_round >= 300:
-        step = 50
-    elif max_round >= 120:
-        step = 20
-    else:
-        step = 10
-    ax.set_xticks(np.arange(0, max_round + 1, step))
+    ax.set_xticks(np.arange(0, max_round + 1, xt_step))
     ax.set_yticks(np.arange(0.0, 1.01, 0.1))
 
-    ax.tick_params(axis="both", labelsize=Label_Size)
-    ax.grid(True)
-    for s in ["bottom", "left", "top", "right"]:
-        ax.spines[s].set_linewidth(bwith)
+    ax.tick_params(axis="both", labelsize=Label_Size, width=bwith, length=6)
+    for spine in ax.spines.values():
+        spine.set_linewidth(bwith)
 
-    ax.set_xlabel("Round", font2)
+    ax.set_xlabel("Training Round", font2)
     ax.set_ylabel(ylabel, font1)
-    ax.set_title(title, font2)
+    ax.set_title(title, fontdict={"family": font_family, "weight": "bold", "size": 28})
 
-    ax.legend(loc="upper left", prop=font_legend, frameon=True, framealpha=0.75)
+    ax.legend(
+        loc=legend_loc,
+        prop=font_legend,
+        frameon=True,
+        framealpha=0.95,
+        borderpad=0.8,
+        labelspacing=0.5,
+        handlelength=2.2,
+    )
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
@@ -221,19 +264,23 @@ def main():
     ap.add_argument(
         "--defenses",
         default="fedtap,fltrust",
-        help="comma-separated defenses (e.g., 'fedavg,fltrust,fedtap') or 'all' to plot all available defenses"
+        help="comma-separated defenses (e.g., 'fedavg,fltrust,fedtap') or 'all' to plot all available defenses",
     )
 
-    ap.add_argument("--plot_asr", action=argparse.BooleanOptionalAction, default=None,
-                    help="Plot ASR curve (auto True for backdoor attacks). Use --no-plot_asr to disable.")
-    ap.add_argument("--asr_key", default=None,
-                    help="Force ASR key (recommended for paper: asr_full). If None, auto-pick.")
-    ap.add_argument("--smooth_sigma", type=float, default=0.0,
-                help="Gaussian smoothing sigma. 0 disables smoothing.")
-    ap.add_argument("--smooth_window", type=int, default=0,
-                help="Gaussian kernel window size (odd). 0 disables smoothing.")
+    ap.add_argument(
+        "--plot_asr",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Plot ASR curve (auto True for backdoor attacks). Use --no-plot_asr to disable.",
+    )
+    ap.add_argument(
+        "--asr_key",
+        default=None,
+        help="Force ASR key (recommended for paper: asr_full). If None, auto-pick.",
+    )
+    ap.add_argument("--smooth_sigma", type=float, default=0.0, help="Gaussian smoothing sigma. 0 disables smoothing.")
+    ap.add_argument("--smooth_window", type=int, default=0, help="Gaussian kernel window size (odd). 0 disables smoothing.")
 
-    
     args = ap.parse_args()
 
     if args.plot_asr is None:
@@ -249,10 +296,8 @@ def main():
         defense_dirs = scan_defenses_with_results(base)
         if len(defense_dirs) == 0:
             raise RuntimeError(f"No defenses with results.json found under: {base}")
-        # use the directory names directly
         defense_list = defense_dirs
     else:
-        # user given names; normalize to directory names used by your runner
         defense_list = [norm_dir_name(x.strip()) for x in defenses_arg.split(",") if x.strip()]
 
     # ---- load series ----
@@ -288,18 +333,20 @@ def main():
     # ---- align by union rounds ----
     rounds = build_union_rounds(acc_series)
     acc_aligned = align_on_union_rounds(rounds, acc_series)
+
     curves_acc = []
     for k in acc_aligned.keys():
         y = acc_aligned[k]
         y = gaussian_smooth_nan(y, args.smooth_sigma, args.smooth_window)
         curves_acc.append((pretty_defense(k), y))
 
-
     plot_multi_curves(
-        rounds, curves_acc,
-        ylabel="Benign Accuracy",
-        title=f"{args.dataset.upper()} / {args.attack.upper()}",
+        rounds,
+        curves_acc,
+        ylabel="Accuracy",
+        title=f"Clean Accuracy",
         out_path=os.path.join(out, "acc_clean.pdf"),
+        legend_loc="lower right",
     )
 
     # ---- ASR ----
@@ -310,18 +357,28 @@ def main():
 
         rounds2 = build_union_rounds(asr_series)
         asr_aligned = align_on_union_rounds(rounds2, asr_series)
+
         curves_asr = []
         for k in asr_aligned.keys():
             y = asr_aligned[k]
             y = gaussian_smooth_nan(y, args.smooth_sigma, args.smooth_window)
             curves_asr.append((pretty_defense(k), y))
 
-
         use_key = args.asr_key or chosen_asr_key or "asr"
+
+        # Fig.1-like title for full-trigger curve
+        if use_key == "asr_full":
+            title = "Attack Success Rate - Full Trigger"
+        if use_key == "asr_partial_23":
+            title = "Attack Success Rate - 2/3 Trigger"
+        if use_key == "asr_shift":
+            title = "Attack Success Rate - Shifted Trigger"
+
         plot_multi_curves(
-            rounds2, curves_asr,
+            rounds2,
+            curves_asr,
             ylabel="Attack Success Rate",
-            title=f"{args.dataset.upper()} / {args.attack.upper()} ({use_key})",
+            title=title,
             out_path=os.path.join(out, f"asr_{use_key}.pdf"),
         )
 

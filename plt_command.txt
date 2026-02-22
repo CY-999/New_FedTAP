@@ -19,7 +19,7 @@ python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs -
 python draft/plt.py --dataset cifar10 --attack semantic_attack --runs_dir runs --out_dir plots --defenses all --asr_key asr_full --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 #pure_ipm
-python draft/plt.py --dataset tinyimagenet --attack pure_ipm --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
+python draft/plt.py --dataset cifar10 --attack pure_ipm --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11
 
 #pure_minmax
 python draft/plt.py --dataset cifar10 --attack pure_minmax --runs_dir runs --out_dir plots --defenses all --end_round 200 --smooth_sigma 2.0 --smooth_window 11

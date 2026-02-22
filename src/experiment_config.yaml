@@ -205,85 +205,85 @@ defenses:
     
 # FedTAP配置
   FedTAP:
-  profile: auto
-  byzantine_attacks: [untargeted_label_flip, pure_ipm, pure_minmax, alie, label_flip]
-  backdoor_attacks:  [a_m, a_s, attack_of_the_tails, semantic_attack, lga]
+    profile: auto
+    byzantine_attacks: [untargeted_label_flip, pure_ipm, pure_minmax, alie, label_flip]
+    backdoor_attacks:  [a_m, a_s, attack_of_the_tails, semantic_attack, lga]
 
-  profiles:
-    base:
-      profile_name: "byzantine_base"
-      enable_convergence_guard: false
+    profiles:
+      base:
+        profile_name: "byzantine_base"
+        enable_convergence_guard: false
 
-      beta_ref: 0.90
-      beta_theta: 0.90
+        beta_ref: 0.90
+        beta_theta: 0.90
 
-      w_cos: 1.0
-      w_sign: 1.0
-      w_contrib: 1.0
+        w_cos: 1.0
+        w_sign: 1.0
+        w_contrib: 1.0
 
-      important_ratio: 0.10
-      max_val_batches: 3
-      clip_coef: 2.5
-      isolate_th: 0.05
-      use_contrib: true
+        important_ratio: 0.10
+        max_val_batches: 3
 
-     
-      lambda_w: 1.4            # base 不要太尖，保泛化
-      kappa_scale: 1.0
-      kappa_min: 0.15
-      kappa_max: 3.0
-      tau_beta: 0.90
-      tau_offset: 0.00
+        clip_coef: 2.5
+        isolate_th: 0.05
 
-    strict:
-      profile_name: "backdoor_strict"
-      enable_convergence_guard: true
+        # NEW (logistic τ/κ)
+        kappa_scale: 1.0
+        kappa_min: 1e-4
+        kappa_max: 10.0
+        tau_beta: 0.95
+        tau_offset: 0.0
 
-      beta_ref: 0.98
-      beta_theta: 0.97
+        # NEW (exp sharpening)
+        lambda_w: 2.0
+        use_contrib: true
 
-      w_cos: 1.0
-      w_sign: 1.0
-      w_contrib: 2.0
+      strict:
+        profile_name: "backdoor_strict"
+        enable_convergence_guard: true
 
-      important_ratio: 0.10
-      max_val_batches: 20
+        beta_ref: 0.98
+        beta_theta: 0.97
 
-      clip_coef: 3.0
-      isolate_th: 0.05
-      use_contrib: true
+        # 更依赖贡献信号（对 DBA 往往更敏感）
+        w_cos: 1.0
+        w_sign: 1.0
+        w_contrib: 3.0
 
-      
-      lambda_w: 1.6            # 控制指数权重集中度
-      strict_lambda_mul: 1.7   # strict λ_eff≈2.72（比你当前 4.4 温和很多）
+        important_ratio: 0.10
+        max_val_batches: 20
 
-      kappa_scale: 1.0
-      kappa_min: 0.25          # 关键：避免后期 MAD 小导致 κ_eff 极小
-      kappa_max: 3.0
-      tau_beta: 0.95           # τ 更平滑，减少轮间 jitter
-      tau_offset: 0.05         # 轻微宽松，降低误杀 benign 概率（可 0.00~0.08 微调）
+        clip_coef: 3.0
+        isolate_th: 0.05
 
-      # convergence guard（让 strict 更“晚且稳”）
-      conv_warmup_rounds: 160  # 你当前是 120，偏早；提高能明显缓解 ACC 被压 :contentReference[oaicite:10]{index=10}
-      conv_patience: 3
-      conv_ema_beta: 0.95
-      conv_loss_rel_delta_th: 0.012
-      conv_norm_frac: 0.010
+        # NEW (logistic τ/κ)
+        kappa_scale: 0.8
+        kappa_min: 1e-4
+        kappa_max: 10.0
+        tau_beta: 0.97
+        tau_offset: 0.0
 
-      # strict behavior
-      strict_keep_ratio: 1.0
+        # convergence guard（让 strict 更早介入，但仍尽量在“相对稳定期”）
+        conv_warmup_rounds: 60
+        conv_patience: 2
+        conv_ema_beta: 0.95
+        conv_loss_rel_delta_th: 0.012
+        conv_norm_frac: 0.010
 
-      strict_hard_drop: false  # 由硬删除改为软降权，最保 ACC
-      strict_down_weight: 0.02
+        # strict core
+        strict_keep_ratio: 0.65     # ★关键：直接砍掉低 cred 尾巴
+        strict_hard_drop: true
+        strict_down_weight: 0.0
 
-      strict_clip_mul: 0.90    # 你当前 0.85 更紧；放松一点保学习速度
-      strict_temp_mul: 0.70    # 你当前 0.55 会让 κ_eff 更小、更硬；上调保 ACC
+        strict_clip_mul: 0.75       # 稍紧一点抑制注入
+        strict_temp_mul: 0.35       # ★关键：κ 缩小 → sigmoid 更尖
+        strict_lambda_mul: 3.0      # ★关键：λ 放大 → 权重更偏向高信任
 
-      strict_z_drop: 2.4
-      strict_theta_floor: 0.12
-      strict_cred_floor: 0.25  # 你当前 0.32 在新 τ/κ 下更容易误杀 benign
-      strict_isolate_th: 0.06  # 避免 benign 大量直接投影
-      strict_theta_cap: 0.85   # 默认 0.70 偏保守；上调保 ACC
+        strict_z_drop: 2.0
+        strict_theta_floor: 0.15
+        strict_cred_floor: 0.35
+        strict_isolate_th: 0.07
+        strict_theta_cap: 0.55      # ★关键：即使高信任也强制保留投影成分
 
         
 
